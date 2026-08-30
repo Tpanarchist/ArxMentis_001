@@ -303,16 +303,20 @@ Hashes are derived envelope fields, never members of the body they verify:
     record_content_hash =
         SHA256(domain_prefix || canonical_encode(record_body))
 
-    batch_body_hash =
-        SHA256(batch_body_domain || canonical_encode(batch_body))
+    batch_payload_hash =
+        SHA256(
+            batch_payload_domain
+            || canonical_encode(batch_body_without_chain_fields)
+        )
 
     resulting_batch_hash =
-        SHA256(batch_chain_domain || prior_batch_hash || batch_body_hash)
+        SHA256(batch_chain_domain || prior_batch_hash || batch_payload_hash)
 
-`content_hash`, `batch_body_hash`, and `resulting_batch_hash` are excluded
-from their own canonical inputs. `prior_batch_hash` occurs exactly once in
-the batch-chain calculation. RecordIds may safely occur in hashed bodies
-because their allocation does not depend on content hashes.
+`content_hash`, `prior_batch_hash`, `batch_payload_hash`, and
+`resulting_batch_hash` are chain-envelope fields excluded from
+`batch_body_without_chain_fields`. `prior_batch_hash` therefore occurs exactly
+once in the batch-chain calculation. RecordIds may safely occur in hashed
+bodies because their allocation does not depend on content hashes.
 
 ### 5.2 Canonical encoding profile
 
@@ -656,11 +660,12 @@ A TransitionProposal is wrapped as an internal control Signal and contains:
 ### 9.1 Canonical append-only source
 
 One KernelTransactionBatch is the canonical append-only record for one
-journal append performed by one SQLite transaction. Its body contains:
+journal append performed by one SQLite transaction. Its envelope and payload
+contain:
 
 - journal_scope_id: the SystemControlJournal or one branch journal.
 - journal-local transaction_sequence.
-- prior_batch_hash.
+- prior_batch_hash as a chain-envelope field excluded from the payload hash.
 - transaction_kind.
 - consumed_record_ids.
 - created_records: a fixed-order collection of complete typed canonical
