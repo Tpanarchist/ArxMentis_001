@@ -4,6 +4,11 @@ import argparse
 from pathlib import Path
 
 STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state"
+SECOND_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state-2"
+DISTINCTION_STATE_FILES = {
+    1: STATE_FILE,
+    2: SECOND_STATE_FILE,
+}
 
 
 def read_state(path: Path = STATE_FILE) -> int:
@@ -32,15 +37,19 @@ def toggle_state(path: Path = STATE_FILE) -> tuple[int, int]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Read or change ArxMentis' persistent bit.")
+    parser = argparse.ArgumentParser(
+        description="Read or change one of ArxMentis' persistent distinctions."
+    )
     parser.add_argument("action", choices=("read", "toggle"))
-    parser.add_argument("--state-file", type=Path, default=STATE_FILE)
+    parser.add_argument("--distinction", type=int, choices=(1, 2), default=1)
+    parser.add_argument("--state-file", type=Path)
     args = parser.parse_args()
+    state_file = args.state_file or DISTINCTION_STATE_FILES[args.distinction]
 
     if args.action == "read":
-        print(read_state(args.state_file))
+        print(read_state(state_file))
     else:
-        previous, current = toggle_state(args.state_file)
+        previous, current = toggle_state(state_file)
         print(f"{previous} -> {current}")
 
 

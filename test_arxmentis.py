@@ -1,10 +1,13 @@
+import io
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
-from arxmentis import read_state, toggle_state, write_state
+from arxmentis import main, read_state, toggle_state, write_state
 
 
 class PersistentStateTests(unittest.TestCase):
@@ -41,6 +44,45 @@ class PersistentStateTests(unittest.TestCase):
 
             self.assertEqual(toggled.stdout.strip(), "0 -> 1")
             self.assertEqual(recovered.stdout.strip(), "1")
+
+    def test_distinctions_persist_independently(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+
+            write_state(1, first)
+            self.assertEqual(read_state(second), 0)
+            self.assertEqual(toggle_state(second), (0, 1))
+            self.assertEqual(read_state(first), 1)
+            self.assertEqual(read_state(second), 1)
+
+    def test_cli_selects_the_second_distinction_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch("sys.argv", ["arxmentis.py", "toggle", "--distinction", "2"]),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "0 -> 1")
+            self.assertEqual(read_state(first), 0)
+            self.assertEqual(read_state(second), 1)
+
+    def test_pair_relation_is_derived_from_both_persistent_bits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+
+            for first_value, second_value in ((0, 0), (0, 1), (1, 0), (1, 1)):
+                write_state(first_value, first)
+                write_state(second_value, second)
+                relation = read_state(first) ^ read_state(second)
+                self.assertEqual(relation, int(first_value != second_value))
 
     def test_write_rejects_values_other_than_zero_or_one(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
