@@ -15,7 +15,7 @@ python arxmentis.py step --distinction 2
 
 The last read for each distinction recovers the value saved by the previous
 process. Distinction 1 remains the default. To use a different state file for
-the selected distinction, pass `--state-file PATH` to either command.
+the selected distinction, pass `--state-file PATH` to `read` or `toggle`.
 
 Given the persisted values `D1` and `D2`, their relation is derivable without a
 relation primitive: `D1 XOR D2` is `0` when they are the same and `1` when they
@@ -26,6 +26,11 @@ are different.
 once with D1=`0` leaves D2 at `0`; stepping with D1=`1` changes D2 to `1`.
 Use `--state-file PATH` to override the target distinction's file; the driver
 is read from its default file.
+
+Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
+stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
+`(1, 1)`. The same dependent transitions therefore yield different final
+states in a different sequence.
 
 Run the tests with:
 

@@ -118,6 +118,28 @@ class PersistentStateTests(unittest.TestCase):
 
         self.assertEqual(next_target_values, [0, 1])
 
+    def test_transition_order_changes_the_final_state(self) -> None:
+        final_states: list[tuple[int, int]] = []
+
+        for targets in ((2, 1), (1, 2)):
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                write_state(1, first)
+                write_state(0, second)
+                paths = {1: first, 2: second}
+
+                for target_distinction in targets:
+                    driver_distinction = 3 - target_distinction
+                    dependent_transition(
+                        paths[driver_distinction],
+                        paths[target_distinction],
+                    )
+
+                final_states.append((read_state(first), read_state(second)))
+
+        self.assertEqual(final_states, [(0, 1), (1, 1)])
+
     def test_pair_relation_is_derived_from_both_persistent_bits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"
