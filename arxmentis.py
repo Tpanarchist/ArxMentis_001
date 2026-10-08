@@ -36,21 +36,34 @@ def toggle_state(path: Path = STATE_FILE) -> tuple[int, int]:
     return previous, current
 
 
+def dependent_transition(driver_path: Path, target_path: Path) -> tuple[int, int]:
+    driver = read_state(driver_path)
+    previous = read_state(target_path)
+    current = driver ^ previous
+    write_state(current, target_path)
+    return previous, current
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Read or change one of ArxMentis' persistent distinctions."
+        description="Read or change ArxMentis' persistent distinctions."
     )
-    parser.add_argument("action", choices=("read", "toggle"))
+    parser.add_argument("action", choices=("read", "toggle", "step"))
     parser.add_argument("--distinction", type=int, choices=(1, 2), default=1)
     parser.add_argument("--state-file", type=Path)
     args = parser.parse_args()
-    state_file = args.state_file or DISTINCTION_STATE_FILES[args.distinction]
+    target_path = args.state_file or DISTINCTION_STATE_FILES[args.distinction]
 
     if args.action == "read":
-        print(read_state(state_file))
-    else:
-        previous, current = toggle_state(state_file)
+        print(read_state(target_path))
+    elif args.action == "toggle":
+        previous, current = toggle_state(target_path)
         print(f"{previous} -> {current}")
+    else:
+        driver_distinction = 3 - args.distinction
+        driver_path = DISTINCTION_STATE_FILES[driver_distinction]
+        previous, current = dependent_transition(driver_path, target_path)
+        print(f"D{args.distinction}: {previous} -> {current}")
 
 
 if __name__ == "__main__":

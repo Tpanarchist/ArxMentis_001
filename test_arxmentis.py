@@ -7,7 +7,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from arxmentis import main, read_state, toggle_state, write_state
+from arxmentis import dependent_transition, main, read_state, toggle_state, write_state
 
 
 class PersistentStateTests(unittest.TestCase):
@@ -72,6 +72,51 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(output.getvalue().strip(), "0 -> 1")
             self.assertEqual(read_state(first), 0)
             self.assertEqual(read_state(second), 1)
+
+    def test_dependent_transition_persists_target_and_preserves_driver(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            driver = Path(directory) / "driver"
+            target = Path(directory) / "target"
+            write_state(1, driver)
+            write_state(0, target)
+
+            self.assertEqual(dependent_transition(driver, target), (0, 1))
+            self.assertEqual(read_state(driver), 1)
+            self.assertEqual(read_state(target), 1)
+
+    def test_cli_steps_the_selected_distinction_from_the_other(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            write_state(1, first)
+            write_state(0, second)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch("sys.argv", ["arxmentis.py", "step", "--distinction", "2"]),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "D2: 0 -> 1")
+            self.assertEqual(read_state(first), 1)
+            self.assertEqual(read_state(second), 1)
+
+    def test_counterfactual_driver_value_changes_target_transition(self) -> None:
+        next_target_values: list[int] = []
+
+        for driver_value in (0, 1):
+            with tempfile.TemporaryDirectory() as directory:
+                driver = Path(directory) / "driver"
+                target = Path(directory) / "target"
+                write_state(driver_value, driver)
+                write_state(0, target)
+
+                _, next_target = dependent_transition(driver, target)
+                next_target_values.append(next_target)
+
+        self.assertEqual(next_target_values, [0, 1])
 
     def test_pair_relation_is_derived_from_both_persistent_bits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
