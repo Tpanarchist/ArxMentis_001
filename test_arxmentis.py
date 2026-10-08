@@ -7,7 +7,14 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest.mock import patch
 
-from arxmentis import dependent_transition, main, read_state, toggle_state, write_state
+from arxmentis import (
+    copy_transition,
+    dependent_transition,
+    main,
+    read_state,
+    toggle_state,
+    write_state,
+)
 
 
 class PersistentStateTests(unittest.TestCase):
@@ -103,6 +110,25 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(read_state(first), 1)
             self.assertEqual(read_state(second), 1)
 
+    def test_cli_copies_the_other_distinction_into_the_selected_one(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            write_state(0, first)
+            write_state(1, second)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch("sys.argv", ["arxmentis.py", "copy", "--distinction", "2"]),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "D2: 1 -> 0")
+            self.assertEqual(read_state(first), 0)
+            self.assertEqual(read_state(second), 0)
+
     def test_counterfactual_driver_value_changes_target_transition(self) -> None:
         next_target_values: list[int] = []
 
@@ -117,6 +143,47 @@ class PersistentStateTests(unittest.TestCase):
                 next_target_values.append(next_target)
 
         self.assertEqual(next_target_values, [0, 1])
+
+    def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
+        states = ((0, 0), (0, 1), (1, 0), (1, 1))
+        xor_futures: list[tuple[int, int]] = []
+        copy_futures: list[tuple[int, int]] = []
+
+        for first_value, second_value in states:
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                write_state(first_value, first)
+                write_state(second_value, second)
+                dependent_transition(first, second)
+                xor_futures.append((read_state(first), read_state(second)))
+
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                write_state(first_value, first)
+                write_state(second_value, second)
+                copy_transition(first, second)
+                copy_futures.append((read_state(first), read_state(second)))
+
+        self.assertEqual(set(xor_futures), set(states))
+        self.assertEqual(len(xor_futures), len(set(xor_futures)))
+        self.assertEqual(copy_futures, [(0, 0), (0, 0), (1, 1), (1, 1)])
+        self.assertLess(len(set(copy_futures)), len(copy_futures))
+
+    def test_repeated_copy_transition_reaches_and_keeps_a_fixed_point(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            driver = Path(directory) / "distinction-1"
+            target = Path(directory) / "distinction-2"
+            write_state(1, driver)
+            write_state(0, target)
+
+            copy_transition(driver, target)
+            settled_state = (read_state(driver), read_state(target))
+            copy_transition(driver, target)
+
+            self.assertEqual(settled_state, (1, 1))
+            self.assertEqual((read_state(driver), read_state(target)), settled_state)
 
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []

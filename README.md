@@ -11,6 +11,7 @@ python arxmentis.py read
 python arxmentis.py toggle --distinction 2
 python arxmentis.py read --distinction 2
 python arxmentis.py step --distinction 2
+python arxmentis.py copy --distinction 2
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -26,6 +27,12 @@ are different.
 once with D1=`0` leaves D2 at `0`; stepping with D1=`1` changes D2 to `1`.
 Use `--state-file PATH` to override the target distinction's file; the driver
 is read from its default file.
+
+`copy --distinction 2` instead persists `D2' = D1`, leaving D1 unchanged. The
+XOR step is bijective over the four possible pair states: each future has one
+past. Copy is non-bijective: `(0, 0)` and `(0, 1)` both map to `(0, 0)`, while
+`(1, 0)` and `(1, 1)` both map to `(1, 1)`. Repeated copy reaches one of these
+fixed points after one transition and stays there.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
