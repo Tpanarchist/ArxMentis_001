@@ -140,6 +140,40 @@ class PersistentStateTests(unittest.TestCase):
 
         self.assertEqual(final_states, [(0, 1), (1, 1)])
 
+    def test_repeated_dependent_transition_has_period_two(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            driver = Path(directory) / "distinction-1"
+            target = Path(directory) / "distinction-2"
+            write_state(1, driver)
+            write_state(0, target)
+            target_values = [read_state(target)]
+
+            for _ in range(4):
+                dependent_transition(driver, target)
+                target_values.append(read_state(target))
+
+        self.assertEqual(target_values, [0, 1, 0, 1, 0])
+
+    def test_repeated_ordered_pair_has_period_three(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            write_state(1, first)
+            write_state(0, second)
+            paths = {1: first, 2: second}
+            round_states = [(read_state(first), read_state(second))]
+
+            for _ in range(3):
+                for target_distinction in (2, 1):
+                    driver_distinction = 3 - target_distinction
+                    dependent_transition(
+                        paths[driver_distinction],
+                        paths[target_distinction],
+                    )
+                round_states.append((read_state(first), read_state(second)))
+
+        self.assertEqual(round_states, [(1, 0), (0, 1), (1, 1), (1, 0)])
+
     def test_pair_relation_is_derived_from_both_persistent_bits(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"

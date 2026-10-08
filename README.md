@@ -32,6 +32,11 @@ stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final
 states in a different sequence.
 
+Repeatedly stepping D2 while holding D1=`1`, starting from `(1, 0)`, produces
+`D2` values `0, 1, 0, 1, 0`, a period-2 cycle. Repeatedly applying the ordered
+round “step D2, then step D1” produces `(1, 0)`, `(0, 1)`, `(1, 1)`, `(1, 0)`.
+This is a period-3 cycle measured in complete two-step rounds.
+
 Run the tests with:
 
 ```powershell
