@@ -185,6 +185,27 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(settled_state, (1, 1))
             self.assertEqual((read_state(driver), read_state(target)), settled_state)
 
+    def test_collapsed_histories_have_identical_persistent_state(self) -> None:
+        initial_states: list[tuple[int, int]] = []
+        final_states: list[tuple[int, int]] = []
+        persisted_files: list[tuple[bytes, bytes]] = []
+
+        for initial_target in (0, 1):
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                write_state(0, first)
+                write_state(initial_target, second)
+                initial_states.append((read_state(first), read_state(second)))
+
+                copy_transition(first, second)
+                final_states.append((read_state(first), read_state(second)))
+                persisted_files.append((first.read_bytes(), second.read_bytes()))
+
+        self.assertEqual(initial_states, [(0, 0), (0, 1)])
+        self.assertEqual(final_states, [(0, 0), (0, 0)])
+        self.assertEqual(persisted_files[0], persisted_files[1])
+
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []
 

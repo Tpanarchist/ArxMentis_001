@@ -34,6 +34,10 @@ past. Copy is non-bijective: `(0, 0)` and `(0, 1)` both map to `(0, 0)`, while
 `(1, 0)` and `(1, 1)` both map to `(1, 1)`. Repeated copy reaches one of these
 fixed points after one transition and stays there.
 
+ArxMentis currently persists only the present pair, not transition history.
+After copying from either `(0, 0)` or `(0, 1)`, the stored state is `(0, 0)` in
+both cases, so this system cannot distinguish those pasts once they converge.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final
