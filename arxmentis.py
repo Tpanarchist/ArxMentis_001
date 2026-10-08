@@ -5,6 +5,7 @@ from pathlib import Path
 
 STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state"
 SECOND_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state-2"
+MEMORY_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-memory"
 DISTINCTION_STATE_FILES = {
     1: STATE_FILE,
     2: SECOND_STATE_FILE,
@@ -44,9 +45,14 @@ def dependent_transition(driver_path: Path, target_path: Path) -> tuple[int, int
     return previous, current
 
 
-def copy_transition(driver_path: Path, target_path: Path) -> tuple[int, int]:
+def copy_transition(
+    driver_path: Path,
+    target_path: Path,
+    memory_path: Path = MEMORY_STATE_FILE,
+) -> tuple[int, int]:
     driver = read_state(driver_path)
     previous = read_state(target_path)
+    write_state(previous, memory_path)
     write_state(driver, target_path)
     return previous, driver
 
@@ -55,22 +61,35 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Read or change ArxMentis' persistent distinctions."
     )
-    parser.add_argument("action", choices=("read", "toggle", "step", "copy"))
+    parser.add_argument(
+        "action", choices=("read", "read-memory", "toggle", "step", "copy")
+    )
     parser.add_argument("--distinction", type=int, choices=(1, 2), default=1)
     parser.add_argument("--state-file", type=Path)
+    parser.add_argument("--memory-file", type=Path)
     args = parser.parse_args()
     target_path = args.state_file or DISTINCTION_STATE_FILES[args.distinction]
 
     if args.action == "read":
         print(read_state(target_path))
+    elif args.action == "read-memory":
+        print(read_state(args.memory_file or MEMORY_STATE_FILE))
     elif args.action == "toggle":
         previous, current = toggle_state(target_path)
         print(f"{previous} -> {current}")
+    elif args.action == "step":
+        driver_distinction = 3 - args.distinction
+        driver_path = DISTINCTION_STATE_FILES[driver_distinction]
+        previous, current = dependent_transition(driver_path, target_path)
+        print(f"D{args.distinction}: {previous} -> {current}")
     else:
         driver_distinction = 3 - args.distinction
         driver_path = DISTINCTION_STATE_FILES[driver_distinction]
-        transition = dependent_transition if args.action == "step" else copy_transition
-        previous, current = transition(driver_path, target_path)
+        previous, current = copy_transition(
+            driver_path,
+            target_path,
+            args.memory_file or MEMORY_STATE_FILE,
+        )
         print(f"D{args.distinction}: {previous} -> {current}")
 
 

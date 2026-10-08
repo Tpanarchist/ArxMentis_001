@@ -12,6 +12,7 @@ python arxmentis.py toggle --distinction 2
 python arxmentis.py read --distinction 2
 python arxmentis.py step --distinction 2
 python arxmentis.py copy --distinction 2
+python arxmentis.py read-memory
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -28,15 +29,18 @@ once with D1=`0` leaves D2 at `0`; stepping with D1=`1` changes D2 to `1`.
 Use `--state-file PATH` to override the target distinction's file; the driver
 is read from its default file.
 
-`copy --distinction 2` instead persists `D2' = D1`, leaving D1 unchanged. The
-XOR step is bijective over the four possible pair states: each future has one
-past. Copy is non-bijective: `(0, 0)` and `(0, 1)` both map to `(0, 0)`, while
-`(1, 0)` and `(1, 1)` both map to `(1, 1)`. Repeated copy reaches one of these
-fixed points after one transition and stays there.
+`copy --distinction 2` first retains the old D2 value in the persistent bit
+`.arxmentis-memory` (M), then persists `D2' = D1`, leaving D1 unchanged. Read M
+with `read-memory`. The XOR step is bijective over the four possible pair
+states: each future has one past. Copy remains non-bijective over `(D1, D2)`:
+`(0, 0)` and `(0, 1)` both map to `(0, 0)`, while `(1, 0)` and `(1, 1)` both
+map to `(1, 1)`. Repeated copy reaches one of these fixed points after one
+transition and stays there.
 
-ArxMentis currently persists only the present pair, not transition history.
-After copying from either `(0, 0)` or `(0, 1)`, the stored state is `(0, 0)` in
-both cases, so this system cannot distinguish those pasts once they converge.
+The retained bit distinguishes converging histories: copying from `(0, 0)`
+leaves the present pair `(0, 0)` and M=`0`; copying from `(0, 1)` also leaves
+the present pair `(0, 0)`, but M=`1`. This retains the overwritten value, not
+a general transition log.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces

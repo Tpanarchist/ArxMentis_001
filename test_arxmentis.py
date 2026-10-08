@@ -114,13 +114,24 @@ class PersistentStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"
             second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
             write_state(0, first)
             write_state(1, second)
             output = io.StringIO()
 
             with (
                 patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
-                patch("sys.argv", ["arxmentis.py", "copy", "--distinction", "2"]),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "copy",
+                        "--distinction",
+                        "2",
+                        "--memory-file",
+                        str(memory),
+                    ],
+                ),
                 redirect_stdout(output),
             ):
                 main()
@@ -128,6 +139,7 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(output.getvalue().strip(), "D2: 1 -> 0")
             self.assertEqual(read_state(first), 0)
             self.assertEqual(read_state(second), 0)
+            self.assertEqual(read_state(memory), 1)
 
     def test_counterfactual_driver_value_changes_target_transition(self) -> None:
         next_target_values: list[int] = []
@@ -161,9 +173,10 @@ class PersistentStateTests(unittest.TestCase):
             with tempfile.TemporaryDirectory() as directory:
                 first = Path(directory) / "distinction-1"
                 second = Path(directory) / "distinction-2"
+                memory = Path(directory) / "memory"
                 write_state(first_value, first)
                 write_state(second_value, second)
-                copy_transition(first, second)
+                copy_transition(first, second, memory)
                 copy_futures.append((read_state(first), read_state(second)))
 
         self.assertEqual(set(xor_futures), set(states))
@@ -175,36 +188,56 @@ class PersistentStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             driver = Path(directory) / "distinction-1"
             target = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
             write_state(1, driver)
             write_state(0, target)
 
-            copy_transition(driver, target)
+            copy_transition(driver, target, memory)
             settled_state = (read_state(driver), read_state(target))
-            copy_transition(driver, target)
+            copy_transition(driver, target, memory)
 
             self.assertEqual(settled_state, (1, 1))
             self.assertEqual((read_state(driver), read_state(target)), settled_state)
 
-    def test_collapsed_histories_have_identical_persistent_state(self) -> None:
+    def test_memory_bit_distinguishes_collapsed_histories(self) -> None:
         initial_states: list[tuple[int, int]] = []
         final_states: list[tuple[int, int]] = []
-        persisted_files: list[tuple[bytes, bytes]] = []
+        memory_values: list[int] = []
 
         for initial_target in (0, 1):
             with tempfile.TemporaryDirectory() as directory:
                 first = Path(directory) / "distinction-1"
                 second = Path(directory) / "distinction-2"
+                memory = Path(directory) / "memory"
                 write_state(0, first)
                 write_state(initial_target, second)
+                write_state(0, memory)
                 initial_states.append((read_state(first), read_state(second)))
 
-                copy_transition(first, second)
+                copy_transition(first, second, memory)
                 final_states.append((read_state(first), read_state(second)))
-                persisted_files.append((first.read_bytes(), second.read_bytes()))
+                memory_values.append(read_state(memory))
 
         self.assertEqual(initial_states, [(0, 0), (0, 1)])
         self.assertEqual(final_states, [(0, 0), (0, 0)])
-        self.assertEqual(persisted_files[0], persisted_files[1])
+        self.assertEqual(memory_values, [0, 1])
+
+    def test_cli_reads_the_persisted_memory_bit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            memory = Path(directory) / "memory"
+            write_state(1, memory)
+            output = io.StringIO()
+
+            with (
+                patch(
+                    "sys.argv",
+                    ["arxmentis.py", "read-memory", "--memory-file", str(memory)],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "1")
 
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []
