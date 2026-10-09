@@ -172,34 +172,70 @@ No amount of additional memory or a more elaborate learner can infer a
 transition that is never observed when multiple environment laws remain
 consistent with the entire history.
 
+## Intervention result
+
+The passive-identifiability bound is not a storage failure. A fixed
+intervention schedule is sufficient to expose the missing context.
+
+Starting from context 0, the experiment:
+
+1. records the observed transition from the current context;
+2. uses existing copy plus toggle operations to force the environment into the
+   complement of the sampled context;
+3. records the second transition there.
+
+The same schedule works for all four deterministic binary laws. It does not
+branch on the hidden law or successor value.
+
+Therefore the current boundary is now sharper:
+
+- model capacity is sufficient;
+- model acquisition laws are sufficient by composition;
+- fixed intervention is sufficient to supply missing information;
+- choosing **when and why** to intervene is not yet internal.
+
 ## Immediate research frontier
 
-The next question is therefore:
+The next capability should be **uncertainty-sensitive intervention**.
 
-> what is the minimum additional causal structure required for ArxMentis to
-> obtain information that passive experience cannot provide?
+Operationally:
 
-Candidate sources of that information must be distinguished rather than
-collapsed together:
+> given partial observations that leave more than one environment law
+> consistent with history, can ArxMentis retain that underdetermination and
+> choose an intervention that distinguishes the remaining possibilities?
 
-- externally supplied coverage of otherwise unvisited states;
-- endogenous intervention that changes the environment into an informative
-  state;
-- exploration policy that decides when an intervention is useful;
-- uncertainty state that distinguishes known from still-underdetermined model
-  entries;
-- autonomous sequencing that invokes observation, storage, prediction, and
-  intervention without the harness choosing each operation.
+This must be separated into two subclaims.
 
-Do not add all of these. The next experiment should determine which is first
-actually necessary.
+### 1. Uncertainty representation
 
-A strong first target is **intervention without uncertainty reasoning**:
-provide a fixed intervention schedule that forces coverage of both binary
-contexts, then test whether the already-derived acquisition program learns all
-four laws. If that succeeds, intervention/coverage is sufficient while
-decision-making about when to intervene remains unearned.
+The system must distinguish at least:
 
-Only after that should the project ask whether ArxMentis can represent its own
-model uncertainty and choose an intervention because it would resolve that
-uncertainty.
+```text
+model determined
+model still underdetermined
+```
+
+and preferably which candidate laws remain possible. Do not assume a new bit
+is required; first search whether existing retained state can encode the
+candidate set without destroying the learned model.
+
+### 2. Informative action selection
+
+An intervention counts as information-seeking only if its selection depends on
+the retained uncertainty and if different interventions have different
+expected discriminatory value.
+
+A fixed intervention schedule, including the one already demonstrated, does
+not satisfy this claim.
+
+The next experiment should therefore construct the smallest environment where:
+
+- passive history leaves two candidate laws;
+- one available action distinguishes them;
+- another available action does not;
+- the action choice occurs before the revealing observation;
+- success is measured by reduction of model ambiguity, not by the environment
+  state itself.
+
+If existing state/laws cannot satisfy that specification, only then add the
+minimum missing structure.
