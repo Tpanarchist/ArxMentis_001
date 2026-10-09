@@ -114,37 +114,92 @@ law before future environment transitions.
 This is the first post-pivot example where formal specification and search
 show that a proposed new primitive is unnecessary.
 
-## Immediate research frontier
+## Four-law result
 
-The next useful boundary is a larger environment class rather than another
-named feature.
-
-A binary deterministic one-step environment has four possible laws:
+For the complete deterministic binary one-step law class, exhaustive search
+establishes:
 
 ```text
-current 0 -> next 0, current 1 -> next 0
-current 0 -> next 0, current 1 -> next 1
-current 0 -> next 1, current 1 -> next 0
-current 0 -> next 1, current 1 -> next 1
+minimum model states = 4
+minimum binary distinctions = 2
 ```
 
-Equivalently: constant-0, identity, negation, and constant-1.
+Existing P0/P1 already meet the capacity lower bound.
 
-The next experiment should ask:
+The current dedicated contextual-adaptation rule is not itself a complete
+model-acquisition rule under the direct interpretation D1=context,
+D2=observed successor. In particular, the context-1 / successor-0 case
+oscillates.
 
-> after sufficient observations, what is the minimum causal architecture needed
-> to predict all four laws exactly without being told which law is active?
+However, search over the existing transition semantics exposed a derived
+operation:
 
-Before adding state or a new update rule:
+```text
+XOR(driver, target)
+then plastic(driver, target, selector)
+```
 
-- establish the information lower bound;
-- specify which observations make the law identifiable;
-- test whether existing P0/P1 or other retained distinctions can be reused as
-  model state;
-- search whether existing transition laws can perform the required model update;
-- account separately for any context scheduling or observation timing supplied
-  by the harness.
+which is exactly a gated write:
 
-The key distinction is now between **representational capacity** and
-**learnability with the existing laws**. Having enough bits to encode a model
-does not mean the current dynamics can acquire that model.
+```text
+selector=0 -> preserve target
+selector=1 -> target := driver
+```
+
+Using a temporary context complement for one slot and the original context for
+the other yields a fixed, branch-free two-slot addressed store. The same
+construction yields a context-selected read into a prediction bit.
+
+Therefore all four binary deterministic laws can be acquired and predicted
+with the existing persistent state and primitive transitions once one
+observation from each context is supplied.
+
+This distinguishes three levels that must remain separate:
+
+1. **capacity**: can the retained state represent the model?
+2. **acquisition dynamics**: can existing laws write the model from observations?
+3. **information availability**: does experience expose enough of the
+   environment to identify the model?
+
+## Passive identifiability bound
+
+The third level now becomes the frontier.
+
+From initial state 0, constant-0 and identity produce the same passive
+trajectory forever. From initial state 1, identity and constant-1 do the same.
+
+No amount of additional memory or a more elaborate learner can infer a
+transition that is never observed when multiple environment laws remain
+consistent with the entire history.
+
+## Immediate research frontier
+
+The next question is therefore:
+
+> what is the minimum additional causal structure required for ArxMentis to
+> obtain information that passive experience cannot provide?
+
+Candidate sources of that information must be distinguished rather than
+collapsed together:
+
+- externally supplied coverage of otherwise unvisited states;
+- endogenous intervention that changes the environment into an informative
+  state;
+- exploration policy that decides when an intervention is useful;
+- uncertainty state that distinguishes known from still-underdetermined model
+  entries;
+- autonomous sequencing that invokes observation, storage, prediction, and
+  intervention without the harness choosing each operation.
+
+Do not add all of these. The next experiment should determine which is first
+actually necessary.
+
+A strong first target is **intervention without uncertainty reasoning**:
+provide a fixed intervention schedule that forces coverage of both binary
+contexts, then test whether the already-derived acquisition program learns all
+four laws. If that succeeds, intervention/coverage is sufficient while
+decision-making about when to intervene remains unearned.
+
+Only after that should the project ask whether ArxMentis can represent its own
+model uncertainty and choose an intervention because it would resolve that
+uncertainty.
