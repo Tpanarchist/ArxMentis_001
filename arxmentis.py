@@ -68,14 +68,27 @@ def memory_dependent_transition(
     return previous, current
 
 
+def evaluate_criterion(
+    first_path: Path,
+    second_path: Path,
+    memory_path: Path = MEMORY_STATE_FILE,
+) -> tuple[bool, int]:
+    mismatch = read_state(first_path) ^ read_state(second_path)
+    write_state(mismatch, memory_path)
+    return mismatch == 0, mismatch
+
+
 def plastic_transition(
     driver_path: Path,
     target_path: Path,
     memory_path: Path = MEMORY_STATE_FILE,
 ) -> tuple[int, int]:
-    if read_state(memory_path) == 0:
-        return dependent_transition(driver_path, target_path)
-    return copy_transition(driver_path, target_path, memory_path)
+    driver = read_state(driver_path)
+    previous = read_state(target_path)
+    selector = read_state(memory_path)
+    current = driver ^ previous if selector == 0 else driver
+    write_state(current, target_path)
+    return previous, current
 
 
 def main() -> None:
@@ -87,6 +100,7 @@ def main() -> None:
         choices=(
             "read",
             "read-memory",
+            "evaluate",
             "toggle",
             "step",
             "copy",
@@ -104,6 +118,14 @@ def main() -> None:
         print(read_state(target_path))
     elif args.action == "read-memory":
         print(read_state(args.memory_file or MEMORY_STATE_FILE))
+    elif args.action == "evaluate":
+        satisfied, mismatch = evaluate_criterion(
+            DISTINCTION_STATE_FILES[1],
+            DISTINCTION_STATE_FILES[2],
+            args.memory_file or MEMORY_STATE_FILE,
+        )
+        result = "satisfied" if satisfied else "not satisfied"
+        print(f"criterion {result}; M={mismatch}")
     elif args.action == "toggle":
         previous, current = toggle_state(target_path)
         print(f"{previous} -> {current}")

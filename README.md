@@ -15,6 +15,7 @@ python arxmentis.py copy --distinction 2
 python arxmentis.py read-memory
 python arxmentis.py memory-step --distinction 2
 python arxmentis.py plastic-step --distinction 2
+python arxmentis.py evaluate
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -54,6 +55,13 @@ identical.
 M: M=`0` applies the XOR step (`D2' = D1 XOR D2`); M=`1` applies copy
 (`D2' = D1`). Copy can update M by retaining the overwritten D2 value, so a
 past state can change which rule a later plastic step uses.
+
+`evaluate` provisionally uses equality as its criterion. It derives
+`E = D1 XOR D2`, considers E=`0` satisfied and E=`1` not satisfied, then writes
+E to M. No new persistent bit is added: evaluation updates the existing rule
+selector. Run `evaluate` before `plastic-step` to feed the outcome into the
+next rule selection. `plastic-step` leaves M unchanged so it remains available
+until the next evaluation or copy.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces

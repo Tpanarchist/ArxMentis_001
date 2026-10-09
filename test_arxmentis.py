@@ -10,6 +10,7 @@ from unittest.mock import patch
 from arxmentis import (
     copy_transition,
     dependent_transition,
+    evaluate_criterion,
     main,
     memory_dependent_transition,
     plastic_transition,
@@ -360,6 +361,75 @@ class PersistentStateTests(unittest.TestCase):
 
             self.assertEqual(output.getvalue().strip(), "D2: 1 -> 1")
             self.assertEqual((read_state(first), read_state(second)), (0, 1))
+
+    def test_criterion_evaluation_writes_derived_mismatch_to_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+
+            write_state(0, first)
+            write_state(0, second)
+            write_state(1, memory)
+            self.assertEqual(evaluate_criterion(first, second, memory), (True, 0))
+            self.assertEqual(read_state(memory), 0)
+
+            write_state(0, first)
+            write_state(1, second)
+            self.assertEqual(evaluate_criterion(first, second, memory), (False, 1))
+            self.assertEqual(read_state(memory), 1)
+
+    def test_criterion_feedback_selects_later_transition_rule(self) -> None:
+        final_states: list[tuple[int, int, int]] = []
+
+        for second_value in (1, 0):
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                memory = Path(directory) / "memory"
+                write_state(1, first)
+                write_state(second_value, second)
+                write_state(0, memory)
+
+                satisfied, selector = evaluate_criterion(first, second, memory)
+                previous, current = plastic_transition(first, second, memory)
+                final_states.append(
+                    (read_state(first), read_state(second), read_state(memory))
+                )
+
+                if second_value == 1:
+                    self.assertTrue(satisfied)
+                    self.assertEqual(selector, 0)
+                    self.assertEqual((previous, current), (1, 0))
+                else:
+                    self.assertFalse(satisfied)
+                    self.assertEqual(selector, 1)
+                    self.assertEqual((previous, current), (0, 1))
+
+        self.assertEqual(final_states, [(1, 0, 0), (1, 1, 1)])
+
+    def test_cli_evaluates_equality_and_updates_memory_selector(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(1, second)
+            write_state(0, memory)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch(
+                    "sys.argv",
+                    ["arxmentis.py", "evaluate", "--memory-file", str(memory)],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "criterion not satisfied; M=1")
+            self.assertEqual(read_state(memory), 1)
 
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []
