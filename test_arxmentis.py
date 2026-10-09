@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from arxmentis import (
     adaptive_transition,
+    commit_alternating_prediction,
     copy_transition,
     contextual_adaptive_transition,
     dependent_transition,
@@ -365,6 +366,73 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(outcomes, [1, 0, 0, 0, 0, 0, 0, 0])
             self.assertEqual(policy_updates, [(0, 1)] + [(1, 1)] * 7)
             self.assertEqual(read_state(policy), 1)
+
+    def test_committed_prediction_precedes_and_matches_alternating_environment(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "driver"
+            prediction = root / "prediction"
+            write_state(0, driver)
+            write_state(0, prediction)
+
+            observed_values: list[int] = []
+            committed_predictions: list[int] = []
+            actual_next_values: list[int] = []
+            for _ in range(8):
+                observed, predicted = commit_alternating_prediction(
+                    driver,
+                    prediction,
+                )
+                observed_values.append(observed)
+                committed_predictions.append(predicted)
+
+                self.assertEqual(read_state(driver), observed)
+                self.assertEqual(read_state(prediction), predicted)
+
+                toggle_state(driver)
+                actual_next = read_state(driver)
+                actual_next_values.append(actual_next)
+                self.assertEqual(read_state(prediction), predicted)
+                self.assertEqual(predicted, actual_next)
+
+            self.assertEqual(observed_values, [0, 1] * 4)
+            self.assertEqual(committed_predictions, [1, 0] * 4)
+            self.assertEqual(actual_next_values, [1, 0] * 4)
+
+    def test_cli_commits_alternating_environment_prediction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(0, memory)
+            output = io.StringIO()
+
+            with (
+                patch(
+                    "arxmentis.DISTINCTION_STATE_FILES",
+                    {1: first, 2: Path(directory) / "d2"},
+                ),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "predict-next",
+                        "--memory-file",
+                        str(memory),
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(
+                output.getvalue().strip(),
+                "D1=0; predicted next D1=1",
+            )
+            self.assertEqual(read_state(first), 0)
+            self.assertEqual(read_state(memory), 1)
 
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))

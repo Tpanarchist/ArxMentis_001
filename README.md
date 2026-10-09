@@ -135,6 +135,17 @@ operations under the imposed alternating schedule; the episode reset and
 environment timing remain externally controlled, so this does not establish
 that ArxMentis predicts the environment.
 
+`predict-next` commits an explicit alternating-environment prediction by
+writing `1 - D1` to the existing M bit before D1 changes. The prediction test
+repeats this for eight transitions, verifies M contains the claim while D1 is
+still at its observed value, then externally toggles D1 and compares the
+previously committed prediction with the new observation. The sequence is
+`D1: 0,1,0,1,0,1,0,1`, predictions `1,0,1,0,1,0,1,0`, and all eight match.
+M is reused as the prediction register and is not an additional persistent bit.
+This verifies a committed, accurate prediction under the assumed alternating
+rule; the rule is encoded by the predictor and supplied by the experiment, so
+this does not show that ArxMentis learned the environmental pattern.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

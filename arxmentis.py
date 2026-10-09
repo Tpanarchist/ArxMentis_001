@@ -39,6 +39,16 @@ def toggle_state(path: Path = STATE_FILE) -> tuple[int, int]:
     return previous, current
 
 
+def commit_alternating_prediction(
+    observed_path: Path,
+    prediction_path: Path = MEMORY_STATE_FILE,
+) -> tuple[int, int]:
+    observed = read_state(observed_path)
+    predicted = 1 - observed
+    write_state(predicted, prediction_path)
+    return observed, predicted
+
+
 def dependent_transition(driver_path: Path, target_path: Path) -> tuple[int, int]:
     driver = read_state(driver_path)
     previous = read_state(target_path)
@@ -141,6 +151,7 @@ def main() -> None:
         choices=(
             "read",
             "read-memory",
+            "predict-next",
             "evaluate",
             "toggle",
             "step",
@@ -171,6 +182,12 @@ def main() -> None:
         print(read_state(target_path))
     elif args.action == "read-memory":
         print(read_state(args.memory_file or MEMORY_STATE_FILE))
+    elif args.action == "predict-next":
+        observed, predicted = commit_alternating_prediction(
+            DISTINCTION_STATE_FILES[1],
+            args.memory_file or MEMORY_STATE_FILE,
+        )
+        print(f"D1={observed}; predicted next D1={predicted}")
     elif args.action == "read-policy":
         print(read_state(policy_path))
     elif args.action == "toggle-policy":
