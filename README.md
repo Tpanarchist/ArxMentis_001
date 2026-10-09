@@ -97,6 +97,13 @@ Against a naive XOR-policy control with identical task state, the experienced
 COPY policy recovers in one cycle instead of three. This isolates the
 performance advantage to persistent policy state for this task.
 
+Before adding context-specific policies, the test suite also checks that the
+actions have different value under different contexts. Starting both trials
+with D2=`1` and using D2=`0` as the provisional success condition, COPY succeeds
+when D1=`0`, while XOR succeeds when D1=`1`. This establishes that the
+environment contains a context-dependent choice; it does not change the
+existing equality criterion in `adapt` or add policy state.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

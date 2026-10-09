@@ -160,6 +160,30 @@ class PersistentStateTests(unittest.TestCase):
 
         self.assertEqual(next_target_values, [0, 1])
 
+    def test_action_outcome_value_depends_on_context(self) -> None:
+        successful_actions: dict[int, set[str]] = {}
+
+        for context in (0, 1):
+            successful_actions[context] = set()
+            for action_name in ("copy", "xor"):
+                with tempfile.TemporaryDirectory() as directory:
+                    driver = Path(directory) / "driver"
+                    target = Path(directory) / "target"
+                    memory = Path(directory) / "memory"
+                    write_state(context, driver)
+                    write_state(1, target)
+
+                    if action_name == "copy":
+                        copy_transition(driver, target, memory)
+                    else:
+                        dependent_transition(driver, target)
+
+                    self.assertEqual(read_state(driver), context)
+                    if read_state(target) == 0:
+                        successful_actions[context].add(action_name)
+
+        self.assertEqual(successful_actions, {0: {"copy"}, 1: {"xor"}})
+
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))
         xor_futures: list[tuple[int, int]] = []
