@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from arxmentis import (
+    adaptive_transition,
     copy_transition,
     dependent_transition,
     evaluate_criterion,
@@ -331,6 +332,133 @@ class PersistentStateTests(unittest.TestCase):
             )
 
         self.assertEqual(final_states, [(0, 1, 0), (0, 0, 1)])
+
+    def test_adaptive_transition_retains_success_and_shifts_after_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            policy = Path(directory) / "policy"
+            write_state(1, first)
+            write_state(0, second)
+            write_state(1, memory)
+            write_state(0, policy)
+
+            self.assertEqual(
+                adaptive_transition(first, second, memory, policy),
+                (0, 1, 0, 0, 0),
+            )
+            self.assertEqual(
+                adaptive_transition(first, second, memory, policy),
+                (1, 0, 1, 0, 1),
+            )
+            self.assertEqual(
+                adaptive_transition(first, second, memory, policy),
+                (0, 1, 0, 1, 1),
+            )
+
+            for _ in range(3):
+                self.assertEqual(
+                    adaptive_transition(first, second, memory, policy),
+                    (1, 1, 0, 1, 1),
+                )
+
+    def test_all_sixteen_initial_configurations_reach_satisfying_fixed_points(
+        self,
+    ) -> None:
+        tested_configurations = 0
+
+        for driver_value in (0, 1):
+            for target_value in (0, 1):
+                for memory_value in (0, 1):
+                    for policy_value in (0, 1):
+                        with tempfile.TemporaryDirectory() as directory:
+                            root = Path(directory)
+                            driver = root / "driver"
+                            target = root / "target"
+                            memory = root / "memory"
+                            policy = root / "policy"
+                            write_state(driver_value, driver)
+                            write_state(target_value, target)
+                            write_state(memory_value, memory)
+                            write_state(policy_value, policy)
+
+                            for _ in range(16):
+                                before = (
+                                    read_state(driver),
+                                    read_state(target),
+                                    read_state(memory),
+                                    read_state(policy),
+                                )
+                                adaptive_transition(driver, target, memory, policy)
+                                after = (
+                                    read_state(driver),
+                                    read_state(target),
+                                    read_state(memory),
+                                    read_state(policy),
+                                )
+                                if before == after and after[0] == after[1]:
+                                    break
+                            else:
+                                self.fail(
+                                    "Adaptive loop did not reach a satisfying fixed point "
+                                    f"from {(driver_value, target_value, memory_value, policy_value)}"
+                                )
+
+                            settled = after
+                            self.assertEqual(settled[0], settled[1])
+                            self.assertEqual(settled[2], 0)
+                            self.assertEqual(
+                                (
+                                    read_state(driver),
+                                    read_state(target),
+                                    read_state(memory),
+                                    read_state(policy),
+                                ),
+                                settled,
+                            )
+                            tested_configurations += 1
+
+        self.assertEqual(tested_configurations, 16)
+
+    def test_cli_runs_adaptive_policy_evaluate_update_cycle(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            policy = Path(directory) / "policy"
+            write_state(1, first)
+            write_state(0, second)
+            write_state(0, memory)
+            write_state(0, policy)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "adapt",
+                        "--distinction",
+                        "2",
+                        "--memory-file",
+                        str(memory),
+                        "--policy-file",
+                        str(policy),
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(
+                output.getvalue().strip(),
+                "D2: 0 -> 1; criterion satisfied; P=0 -> 0",
+            )
+            self.assertEqual((read_state(first), read_state(second)), (1, 1))
+            self.assertEqual(read_state(memory), 0)
+            self.assertEqual(read_state(policy), 0)
 
     def test_cli_runs_memory_selected_transition(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

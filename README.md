@@ -16,6 +16,8 @@ python arxmentis.py read-memory
 python arxmentis.py memory-step --distinction 2
 python arxmentis.py plastic-step --distinction 2
 python arxmentis.py evaluate
+python arxmentis.py adapt --distinction 2
+python arxmentis.py read-policy
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -58,10 +60,21 @@ past state can change which rule a later plastic step uses.
 
 `evaluate` provisionally uses equality as its criterion. It derives
 `E = D1 XOR D2`, considers E=`0` satisfied and E=`1` not satisfied, then writes
-E to M. No new persistent bit is added: evaluation updates the existing rule
-selector. Run `evaluate` before `plastic-step` to feed the outcome into the
-next rule selection. `plastic-step` leaves M unchanged so it remains available
+E to M. Run `evaluate` before `plastic-step` to feed the outcome into the next
+rule selection. `plastic-step` leaves M unchanged so it remains available
 until the next evaluation or copy.
+
+`adapt --distinction 2` implements the action-evaluate-update cycle with a
+separate persistent policy bit P in `.arxmentis-policy`: P=`0` selects XOR and
+P=`1` selects copy. It applies P's transition, evaluates equality and stores
+the result E in M, then uses win-stay/lose-shift: keep P when E=`0`, otherwise
+flip P. Read or flip P with `read-policy` or `toggle-policy`. Unlike the
+standalone `plastic-step`, `adapt` does not use M to choose the current action;
+M records the outcome while P preserves the policy.
+
+The test suite enumerates all 16 initial configurations `(D1, D2, M, P)` while
+holding D1 fixed. Under repeated `adapt` cycles, each reaches a fixed state
+with D1=D2 and E=0.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
