@@ -1,6 +1,7 @@
 import unittest
 
 from formalism import (
+    binary_law_trajectory_signature,
     bits_required,
     can_predict_all_binary_deterministic_laws,
     can_predict_fixed_binary_change_laws,
@@ -10,6 +11,7 @@ from formalism import (
     minimum_states_for_all_binary_deterministic_prediction,
     minimum_states_for_binary_past,
     minimum_states_for_fixed_binary_change_prediction,
+    passive_binary_law_classes,
 )
 
 
@@ -66,6 +68,22 @@ class FormalMinimalityTests(unittest.TestCase):
             4,
         )
         self.assertEqual(bits_required(4), 2)
+
+    def test_passive_observation_cannot_identify_all_laws_from_zero(self) -> None:
+        self.assertEqual(
+            binary_law_trajectory_signature((0, 0), 0),
+            binary_law_trajectory_signature((0, 1), 0),
+        )
+        classes = passive_binary_law_classes(0)
+        self.assertIn(((0, 0), (0, 1)), classes)
+
+    def test_passive_observation_cannot_identify_all_laws_from_one(self) -> None:
+        self.assertEqual(
+            binary_law_trajectory_signature((0, 1), 1),
+            binary_law_trajectory_signature((1, 1), 1),
+        )
+        classes = passive_binary_law_classes(1)
+        self.assertIn(((0, 1), (1, 1)), classes)
 
 
 if __name__ == "__main__":
