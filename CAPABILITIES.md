@@ -112,6 +112,51 @@ environmental flip so that equality holds after the flip.
 This is mechanical anticipatory regulation under an imposed schedule, not
 prediction.
 
+### Learned fixed binary transition model and prediction
+
+**Claim:** after one observed transition from an unknown fixed binary environment
+law, existing state can retain which law is active and predict later states
+before the environment transitions.
+
+The environment class is deliberately small:
+
+- STAY: `D1' = D1`
+- FLIP: `D1' = 1 - D1`
+
+Protocol:
+
+1. D2 initially holds the previous D1 value.
+2. The environment performs one transition under an unknown fixed law.
+3. Existing `evaluate_criterion` writes `M = D1 XOR D2`.
+4. Therefore M=0 identifies STAY and M=1 identifies FLIP.
+5. Existing `memory_dependent_transition` uses M to advance D2.
+6. After synchronization, advancing D2 once before each environment transition
+   produces the next-state prediction.
+
+The regression covers both initial D1 values and both laws, then predicts eight
+future transitions exactly.
+
+- State: D1, D2, M.
+- Law: existing equality evaluation and memory-dependent transition.
+- Environment: the harness selects a fixed hidden STAY or FLIP law, initializes
+  D2 to the first observed D1, and controls transition timing.
+- Evaluator: after each prediction is committed, the harness advances D1 and
+  checks whether D2 equals the realized environment state.
+
+**Minimality result:** exhaustive search proves that one model state cannot
+represent both STAY and FLIP for exact next-state prediction. Two model states,
+equivalent to one binary distinction, are sufficient and necessary. Existing M
+already supplies that capacity.
+
+**What is earned:** a learned persistent environment-model distinction and
+next-state prediction for this two-law class. The prediction is present in D2
+before the next environment transition.
+
+**What is not earned:** autonomous observation timing, discovery of the
+environment class, prediction over arbitrary binary laws, or a general learned
+world model. The harness still supplies the experiment clock and restricts the
+possible environment laws.
+
 ### Delayed credit
 
 **Claim:** a policy choice can receive evaluative credit only after a later
