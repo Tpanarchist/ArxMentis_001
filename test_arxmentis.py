@@ -12,6 +12,7 @@ from arxmentis import (
     dependent_transition,
     main,
     memory_dependent_transition,
+    plastic_transition,
     read_state,
     toggle_state,
     write_state,
@@ -291,6 +292,74 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(output.getvalue().strip(), "D2: 0 -> 1")
             self.assertEqual((read_state(first), read_state(second)), (0, 1))
             self.assertEqual(read_state(memory), 1)
+
+    def test_history_selects_transition_for_same_present_pair(self) -> None:
+        final_states: list[tuple[int, int, int]] = []
+
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(0, second)
+            write_state(0, memory)
+            toggle_state(second)
+
+            self.assertEqual((read_state(first), read_state(second)), (0, 1))
+            self.assertEqual(read_state(memory), 0)
+            plastic_transition(first, second, memory)
+            final_states.append(
+                (read_state(first), read_state(second), read_state(memory))
+            )
+
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(1, second)
+            write_state(0, memory)
+            copy_transition(first, second, memory)
+            toggle_state(second)
+
+            self.assertEqual((read_state(first), read_state(second)), (0, 1))
+            self.assertEqual(read_state(memory), 1)
+            plastic_transition(first, second, memory)
+            final_states.append(
+                (read_state(first), read_state(second), read_state(memory))
+            )
+
+        self.assertEqual(final_states, [(0, 1, 0), (0, 0, 1)])
+
+    def test_cli_runs_memory_selected_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(1, second)
+            write_state(0, memory)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "plastic-step",
+                        "--distinction",
+                        "2",
+                        "--memory-file",
+                        str(memory),
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "D2: 1 -> 1")
+            self.assertEqual((read_state(first), read_state(second)), (0, 1))
 
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []

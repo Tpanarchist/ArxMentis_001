@@ -14,6 +14,7 @@ python arxmentis.py step --distinction 2
 python arxmentis.py copy --distinction 2
 python arxmentis.py read-memory
 python arxmentis.py memory-step --distinction 2
+python arxmentis.py plastic-step --distinction 2
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -48,6 +49,11 @@ a general transition log.
 at `(0, 0)`, M=`0` leaves D2 at `0`, while M=`1` changes D2 to `1`. Thus the
 retained past can affect a later transition even when the present pair is
 identical.
+
+`plastic-step --distinction 2` selects between existing transition rules using
+M: M=`0` applies the XOR step (`D2' = D1 XOR D2`); M=`1` applies copy
+(`D2' = D1`). Copy can update M by retaining the overwritten D2 value, so a
+past state can change which rule a later plastic step uses.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
