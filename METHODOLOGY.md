@@ -88,20 +88,63 @@ This lower bound does not prove that ArxMentis discovered the contexts. The
 current implementation is given the context partition externally and uses D1
 to select one of two policy bits.
 
+### Fixed STAY/FLIP environment prediction
+
+For the restricted environment class
+
+```text
+STAY  next = current
+FLIP  next = 1-current
+```
+
+exact next-state prediction requires the learned system to distinguish which
+of the two laws is active. Exhaustive encoder/decoder search establishes:
+
+```text
+minimum model states = 2
+minimum binary distinctions = 1
+```
+
+The existing M bit already meets this lower bound. No new persistent state or
+runtime transition is needed. One observed transition lets
+`evaluate_criterion` write the transition parity into M; existing
+`memory_dependent_transition` can then advance D2 according to the learned
+law before future environment transitions.
+
+This is the first post-pivot example where formal specification and search
+show that a proposed new primitive is unnecessary.
+
 ## Immediate research frontier
 
-The next high-value target is a capability for which the harness currently
-supplies essential structure. Prediction is a strong candidate:
+The next useful boundary is a larger environment class rather than another
+named feature.
 
-> after observing an environment sequence, produce a next-state prediction
-> better than an appropriate baseline without being told the environment law.
+A binary deterministic one-step environment has four possible laws:
 
-The experiment must distinguish:
+```text
+current 0 -> next 0, current 1 -> next 0
+current 0 -> next 0, current 1 -> next 1
+current 0 -> next 1, current 1 -> next 0
+current 0 -> next 1, current 1 -> next 1
+```
 
-- learning a law from merely being initialized with one;
-- prediction from externally scheduled anticipatory action;
-- stored world-model state from policy state;
-- performance due to internal state from performance due to the harness.
+Equivalently: constant-0, identity, negation, and constant-1.
 
-Do not add a "model bit" until the capability has been specified and the
-existing architecture has failed the corresponding search.
+The next experiment should ask:
+
+> after sufficient observations, what is the minimum causal architecture needed
+> to predict all four laws exactly without being told which law is active?
+
+Before adding state or a new update rule:
+
+- establish the information lower bound;
+- specify which observations make the law identifiable;
+- test whether existing P0/P1 or other retained distinctions can be reused as
+  model state;
+- search whether existing transition laws can perform the required model update;
+- account separately for any context scheduling or observation timing supplied
+  by the harness.
+
+The key distinction is now between **representational capacity** and
+**learnability with the existing laws**. Having enough bits to encode a model
+does not mean the current dynamics can acquire that model.
