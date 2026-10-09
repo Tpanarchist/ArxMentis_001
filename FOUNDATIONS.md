@@ -776,6 +776,547 @@ test SHA256 hashes match the baseline. `validation_results.json` records
 these results and preserves the original 60-test validation as the prior pass.
 
 
+## 14. Factorized Transformation Selection and Fixed Order
+
+This experiment continues from the 72-test baseline and preserves Section 13.
+All five existing binary capacities are assigned roles C0,C1,A,B,W. No sixth
+carrier, runtime law, interpreter, instruction pointer, or persistent sequence
+representation is introduced. `arxmentis.py` remains unchanged.
+
+### Convention, target, and algebraic properties
+
+Selector index is `2*C0+C1`. Programs list calls in execution order;
+`compose(first,second)` means second after first. Let X toggle A and S swap A/B.
+The selector bits mean **include X iff C0=1, then include S iff C1=1**:
+
+| C0,C1 | Selected data table in input order 00,01,10,11 | Meaning |
+| --- | --- | --- |
+| 00 | 0,1,2,3 | IDENTITY |
+| 01 | 0,2,1,3 | S |
+| 10 | 2,3,0,1 | X |
+| 11 | 1,3,0,2 | S after X |
+
+The full target preserves both selectors:
+
+| Input C0,C1,A,B | Output C0,C1,A,B |
+| --- | --- |
+| 0000 | 0000 |
+| 0001 | 0001 |
+| 0010 | 0010 |
+| 0011 | 0011 |
+| 0100 | 0100 |
+| 0101 | 0110 |
+| 0110 | 0101 |
+| 0111 | 0111 |
+| 1000 | 1010 |
+| 1001 | 1011 |
+| 1010 | 1000 |
+| 1011 | 1001 |
+| 1100 | 1101 |
+| 1101 | 1111 |
+| 1110 | 1100 |
+| 1111 | 1110 |
+
+Canonical table: `(0,1,2,3,4,6,5,7,10,11,8,9,13,15,12,14)`.
+This is a nonaffine bijection, image size sixteen, ANF degree two. With
+`u=A XOR C0`, the equations are `A'=u XOR C1(u XOR B)` and
+`B'=B XOR C1(u XOR B)`. Independent runtime toggle and three-XOR swap tables
+verify each selector-conditioned data composition, including code 11.
+
+The five-bit contract is total on **all 32 initial states**:
+`(C0,C1,A,B,W) -> (C0,C1,F_C0,C1(A,B),0)`. Old W is discarded. This is an
+image-size-sixteen map, not a five-bit permutation preserving arbitrary W.
+
+### Workspace proof and exact minimum executor length
+
+Every distinct-role low-level call over four carriers is resampled: 100 labels,
+76 primitive tables. Bijective calls are affine; every nonaffine call is
+noninjective on the complete sixteen-state cube. A first noninjective factor
+merges inputs irrecoverably, so a total bijective composition can use only
+affine bijections. The nonaffine target is therefore impossible with no
+workspace at every length. One existing expendable bit suffices below, so the
+minimum workspace capacity for this declared target is exactly one bit.
+
+The five-carrier basis contains **225 labels and 175 distinct tables**:
+5 toggles, 20 canonical XORs, 60 copies, 30 canonical evaluations, and 60 plastic
+calls. Memory/XOR and evaluator-input-order aliases give 125 singleton classes
+and 50 classes of size two. Copy's two writes are included and cost one candidate
+call, consistently with the earlier declared basis. Initialization writes and
+high-level commands are excluded. Aliased role paths are excluded.
+
+A complete finite-word constraint encoding extends the existing experiment
+module. Each operation choice is shared across all 32 input rows. Bitplanes
+encode all five persistent output coordinates. It does not select different
+words based on selector/data values. All 175 encoded canonical one-call maps
+are independently matched to tables sampled from actual runtime calls. Small
+word searches are cross-checked against independent complete enumeration.
+
+Z3 4.15.4 is an **external research dependency**, pinned in
+`requirements-research.txt`; the runtime has no solver dependency. Exact-length
+queries cover lengths zero through seven. Lengths zero through six return
+UNSAT; a seven-operation word returns SAT and is replayed against real files.
+Thus the obvious seven-call upper bound is **minimal on the declared total
+32-state contract and 175-table basis**:
+
+```text
+dependent_transition(C0, A)
+copy_transition(A, B, W)
+plastic_transition(W, A, C1)
+plastic_transition(A, W, C1)
+plastic_transition(B, A, C1)
+copy_transition(W, A, B)
+dependent_transition(A, W)
+```
+
+Both selectors remain unchanged after every call. W is overwritten without
+initialization and is zero at exit.
+
+This search uses exact finite constraints rather than materialized BFS
+frontiers; frontier sizes and saturation are **not applicable**. It does not
+exhaust the whole five-bit transformation closure. Each solver check has a
+120,000 ms timeout. Ordinary enumeration has a 128-word storage cap and a
+180-second wall cap. UNKNOWN/timeout never means UNSAT or completeness.
+
+Main shortest-word enumeration reached the wall cap with **16 canonical words
+retained**. Their expanded labeled words are retained in the same evidence JSON.
+The 16 retained canonical words expand to **396 labeled words**. These are
+lower bounds on counts, not all shortest words; the exact total count
+remains unknown. All valid shortest words necessarily belong to one complete
+32-row behavioral class because that is the search criterion. The minimum
+length proof is independent of incomplete witness enumeration.
+
+### Reuse, physical roles, and selector alphabet transport
+
+Persistent reuse covers all four selector pairs, all four data pairs, repeated
+twice: **32 executions**, changing only A/B between calls. Both selector files
+remain byte-identical after each primitive. Separate-process regressions persist
+each selector pair in one process and consume it in another, then reuse it on
+another data pair. The same fixed word is used in every child process.
+
+All **120 physical role permutations** of temporary files corresponding to the
+five configured carriers are tested on all 32 initial states: **3,840 complete
+state replays**, including both old W values. Configured repository state files
+are untouched. Behavior is role-relative over this declared interface.
+
+For selector-code permutation phi, transport means `F_phi=phi F phi^-1`, with phi
+acting on C0/C1 alone. Every permutation of four selector states is verified
+affine over GF(2), and the established two-bit closure supplies shortest selector
+recoding support. Conjugation (inverse recoding, executor, forward recoding)
+realizes **all 24 recoded families**, each checked against real files on all
+32 inputs. Data encoding is unchanged and both selector bits are restored.
+
+Joint constraint searches for all 24 targets are complete UNSAT through length
+five. Length six times out; length seven finds one target before timing out.
+Consequently not all transported minimum lengths are known. Per-recoding support
+and witness-length upper bounds are listed in the JSON. Groupings by those
+lengths are **upper-bound groups**, not shortest-length classes. All 24 complete
+transported tables are distinct. Representation transport is established;
+universal syntax invariance and universal seven-call minimality are not.
+Conjugation upper-bound groups are `{7:1,9:4,11:9,13:7,15:3}` for the main
+family and `{6:1,8:4,10:9,12:7,14:3}` for the comparison family.
+
+### Flat lookup comparison: a counterexample to a compression advantage
+
+The controlled lookup comparator changes **only code 11** to `X after S`:
+its data tables are IDENTITY, S, X, and `(2,0,3,1)`. This keeps selector capacity,
+data generators, workspace contract, and degree two controlled. It differs
+from the particular requested X-then-S factorization. The lookup itself is
+recoverable as the opposite-order factorization, a structural finding rather
+than a new kind of carrier.
+
+Complete queries return UNSAT at lengths zero through five and find this
+**six-operation** executor:
+
+```text
+evaluate_criterion(A, B, W)
+evaluate_criterion(C0, W, B)
+plastic_transition(A, W, C1)
+evaluate_criterion(B, W, A)
+dependent_transition(A, B)
+dependent_transition(B, W)
+```
+
+It preserves both selectors and normalizes arbitrary old W to zero. Complete
+length-six enumeration finds **24 canonical shortest words and 400 labeled
+shortest words**; all canonical
+and alias-expanded labeled words are retained. All have one complete five-bit
+behavioral class. All 24 selector recodings also have real-file conjugation
+witnesses, with six plus recoding-support lengths as upper bounds.
+
+The measured executor lengths are therefore **7 for the requested family and
+6 for this lookup**. The requested factorization saves no executor call; it is
+one call more expensive here. Both use two selector bits and one workspace bit.
+The opposite-order naive composition (six-call controlled swap, then selector
+XOR) also costs seven; its discovered six-call realization fuses away one call.
+This is an explicit one-call composition saving for that order, not a saving
+caused by calling its representation flat.
+This establishes an order-dependent implementation cost, not a universal
+factorized-versus-flat theorem. Calling a supplied lookup “flat” does not prevent
+it from having another factorization.
+
+An additional, more unrelated lookup probe uses IDENTITY, S, X, and toggle B.
+No ordering of its entries with IDENTITY as the omitted-generators behavior
+makes it a two-generator inclusion rectangle. Its target has degree three.
+Queries zero through six are UNSAT; seven and eight time out without a witness.
+Its one-workspace realizability and shortest length remain **unresolved**.
+This probe supplies no compression result and no new-primitive necessity claim.
+
+### Earned boundary and accounting
+
+The earned claim is: two persistent selector bits can factorize a four-member
+family of effective transformations; a fixed externally supplied executor
+consumes their inclusion choices and composes X/S effects on independent data
+in a fixed externally supplied order. This is demonstrated extensionally, not
+by equating semantic names.
+
+X and S do not commute: `S after X=(1,3,0,2)` while
+`X after S=(2,0,3,1)`, differing on all four data inputs. **Selector state
+determines inclusion; executor structure determines order.** The selectors do
+not encode arbitrary sequences or their order.
+
+| Contribution | Still supplied |
+| --- | --- |
+| Carrier/state | Five existing capacities, initial values, data interventions; old W expendable |
+| Transformation laws | Existing runtime maps; external solver encoding checked against every candidate table |
+| Representation/map | Selector meanings, role assignments, and recoding permutations |
+| Sequencing | External search, retained witness, fixed order/invocation, subprocess schedule, stopping rules |
+| Environment | Temporary file persistence and externally supplied data |
+| Evaluator | Complete target table and selector/workspace preservation criteria |
+
+Unearned: selector-controlled order, arbitrary sequences as data, variable-length
+programs, stored primitive identities, instruction pointer, general interpreter,
+endogenous synthesis, autonomous execution, and self-modification.
+
+```mermaid
+flowchart LR
+  I[Two persistent inclusion bits] --> F[Factorized four-member family]
+  G[Existing X and workspace-supported S] --> F
+  O[Externally fixed order] --> F
+  W[One expendable existing bit] --> E[Fixed executor]
+  F --> E
+  E --> R[Reusable transformation selection]
+  M[All 24 affine selector recodings] --> T[Transported families]
+  R --> T
+```
+
+Graph arrows describe demonstrated witness construction and supplied inputs.
+Only the zero-versus-one workspace requirement has an all-length lower-bound
+proof here; other arrows are not independent removal-tested necessities.
+
+No new runtime primitive is needed for the main or controlled lookup targets.
+The next clean question is whether persistent state can encode order as well as
+inclusion. It is not implemented here. Before broad compression claims, the
+unfinished shortest-word counts and unrelated cubic lookup remain explicit
+research gaps.
+
+### Reproduction and validation
+
+Use the explicit Python 3.14.6 repository venv. Install only the external
+research dependency with `-m pip install -r requirements-research.txt`.
+Ordinary evidence runs preserve the retained two-selector certificate while
+recomputing previous experiments. To repeat the bounded expensive selector
+queries and exhaustive replays:
+
+```powershell
+.\.venv\Scripts\python.exe -B composition_experiments.py --selector-search --output composition_results.json
+.\.venv\Scripts\python.exe -B -m unittest test_composition_experiments.FactorizedSelectionTests -v
+.\.venv\Scripts\python.exe -B -m unittest
+```
+
+Final validation: **10 focused tests pass** (160.669 seconds); **82 total
+tests pass** (214.223 seconds), comprising the unchanged 40 historical tests
+and 42 experimental tests. All 72 baseline tests are preserved. Installed
+Pylance 2026.4.1, basic mode with the explicit Python 3.14.6 venv, reports
+zero Python diagnostics on both changed Python files. Readiness and source
+hash matches are checked. Runtime/historical SHA256 hashes are unchanged;
+`git diff --check`, artifact whitespace, search fingerprints, and evidence
+consistency checks pass. `validation_results.json` records the results and
+preserves the prior 72-test pass.
+
+
+## 15. Persistent Order Boundary
+
+This continues the 82-test result in section 14. Sections 13 and 14 retain the
+boundaries earned at those earlier passes; their prospective questions are
+historical. Five roles `(CX,CS,O,A,B)` use the existing five carrier capacities.
+There is no independent workspace, sixth configured file, new primitive,
+opcode, program counter, or interpreter.
+
+**Result:** the natural total 32-state target is impossible at every composition
+length. The canonical 20-state target has an actual-file verified fixed
+**eleven-operation** executor. All 120 physical assignments pass. Reserved
+codes are used, and a separate invariant proves some reserved intermediate
+state is necessary for this contract and basis. Minimum length is unresolved:
+the proved interval is **9 through 11**. Shortest-word counts are unknown.
+
+### Representation and distinct contracts
+
+Five different two-bit maps are required: identity, toggle A (X), swap A,B (S),
+X then S, and S then X. Four two-bit selector codes cannot independently
+represent five maps. Three binary selector distinctions provide eight codes.
+This is a representational counting bound, not an execution theorem.
+
+Canonical selectors are `000:I`, `100:X`, `010:S`, `110:X then S`,
+`111:S then X`. The partial contract assigns no required semantics to
+`001,011,101`. Entry and exit admit five selectors times all four data pairs;
+intermediate execution may use any of the 32 configurations.
+
+The natural TOTAL contract ignores O unless both operations participate and
+preserves every selector bit on every input. Full state index is
+`16*CX+8*CS+4*O+2*A+B`. The table below is complete: each row gives full output
+indices for data inputs 00,01,10,11 in order.
+
+| Input selector | Total behavior | Four full-state output indices |
+| --- | --- | --- |
+| 000 | I | 0,1,2,3 |
+| 001 | I | 4,5,6,7 |
+| 010 | S | 8,10,9,11 |
+| 011 | S | 12,14,13,15 |
+| 100 | X | 18,19,16,17 |
+| 101 | X | 22,23,20,21 |
+| 110 | X then S | 25,27,24,26 |
+| 111 | S then X | 30,28,31,29 |
+
+Its algebraic normal form over GF(2), where + is XOR and multiplication is AND:
+
+```text
+CX' = CX                  CS' = CS               O' = O
+A' = A + CS*B + CS*A + CX + CX*CS + CX*CS*O
+B' = B + CS*B + CS*A      + CX*CS + CX*CS*O
+```
+
+It is a nonaffine bijection, image size 32, degree three. The artifact includes
+all rows and mechanically recovered ANF terms.
+
+### Total impossibility and the partial-domain counterexample
+
+All 225 admitted distinct-role calls were freshly sampled through the runtime
+over all 32 inputs. Their 175 distinct tables comprise 5 toggles, 20 XORs
+(including memory aliases), 60 copies, 30 evaluations (input-order aliases),
+and 60 plastics. Toggle/XOR have rank 32 and are affine; copy/evaluation rank
+16 and are affine; plastic rank 24 and is nonaffine. Every bijective primitive
+is affine; every nonaffine primitive is globally noninjective.
+
+A first noninjective primitive irreversibly lowers full-cube prefix rank below
+32. Without one, composition consists of affine bijections and remains affine.
+Neither case realizes the nonaffine bijective total target. This is an
+all-length proof, independent of bounded search.
+
+The partial input indices and their required output indices are:
+
+```text
+inputs:  0,1,2,3, 8,9,10,11, 16,17,18,19, 24,25,26,27, 28,29,30,31
+outputs: 0,1,2,3, 8,10,9,11, 18,19,16,17, 25,27,24,26, 30,28,31,29
+```
+
+`plastic(CS,CX,O)` has global rank 24 but permutes this twenty-state domain,
+interchanging selectors 010 and 110 and retaining data. Six of the sixty
+nonaffine primitives are initially injective on it. Therefore the total proof
+cannot be transferred to the partial contract. The artifact records the
+restricted rank of every nonaffine primitive on each retained executor's
+incoming reachable set, not just its initial restriction.
+
+Copy/evaluation can never occur in a valid twenty-distinction executor: their
+entire image has sixteen states. After sound rank pruning and alias merging,
+search admits 85 tables: 5 toggles, 20 XORs, 60 plastics. Initialization writes
+and high-level controls are excluded.
+
+### Search accounting and shortest-claim limits
+
+The existing finite-word solver now accepts partial domains, selected schemas,
+incremental row refinement, and optional prefix injectivity. Each position's
+operation choice is shared by every input; every required output coordinate
+is checked. Refined SAT models are retained only after all rows agree. UNSAT
+on an asserted subset implies full UNSAT. Prefix injectivity is used only for
+contracts with distinct inputs and distinct required outputs.
+
+Independent restricted-map BFS through length three gives new-map counts
+`1,31,596,9123`, cap 250,000 tables. These frontiers are complete, the target
+is absent, and closure is not saturated.
+
+| Search | Exact-length results | Limits |
+| --- | --- | --- |
+| Hierarchical, all rows | 0-8 UNSAT; 9-12 UNKNOWN/timeouts | 120s/check, 125s/query, 128 stored words; first witness requested |
+| Hierarchical, row refinement | 9-12 UNKNOWN; 13 SAT, one word | 120s/check, 300s/query, 128 stored words |
+| Flat transported code | 0-7 UNSAT; 8-11 UNKNOWN; 12 SAT, one word | 120s/check, 125s/query, 128 stored words |
+
+A final prefix-injective query for lengths nine and ten uses 180s/check,
+185s/query, and a 128-word storage cap. Its outcomes are preserved separately
+in `persistent_order.search_records`. Every search record includes exact domain,
+length, basis schemas, times, cap, stop reason and completeness. Solver search
+has no materialized BFS frontier. UNKNOWN is never interpreted as absence.
+
+The native thirteen-call hierarchical word ends with
+`xor(B,CS); xor(B,A); xor(B,CS)`. These calls commute on the entire cube;
+the two identical CS updates cancel. The eleven-call reduction is verified
+through actual runtime tables. Earlier, transporting the flat word produced
+fourteen calls and bounded complete-row local window queries reduced that to
+twelve. These supports and their query results remain recorded; they are not
+shortest-word enumeration. Lengths nine and ten remain unresolved.
+
+An external finite-group construction was also explored. Its first very long
+word failed final verification after attempted compression. It is excluded
+from retained capability evidence and supports no claim here. No group library
+is required by the reproducible experiment.
+
+### Fixed executor, reachable distinctions and reserved states
+
+`xor(driver,target)` denotes dependent_transition;
+`plastic(driver,target,selector)` denotes plastic_transition. The exact fixed
+support below is identical for every admissible selector and data input:
+
+```text
+1  xor(CX,A)                7  xor(O,B)
+2  xor(B,A)                 8  plastic(A,O,CS)
+3  xor(A,O)                 9  xor(A,O)
+4  xor(A,B)                10  toggle(CS)
+5  toggle(CS)              11  xor(B,A)
+6  plastic(A,O,CS)
+```
+
+There are nine affine calls and two plastic calls. Full prefix rank is 32
+through step five and 24 thereafter. Restricted rank is twenty at every
+prefix. Both plastics are injective on their actual incoming twenty-state
+sets. Steps three and four each send six trajectories into reserved codes;
+step five sends eight. All three reserved codes are visited. All selectors
+return to their exact canonical codes at exit, although they change internally.
+No prefix has a globally clean bit: fixing any one of five bits permits only
+sixteen states, fewer than the twenty distinctions that must survive.
+
+The actual executor's unrequired full-cube extension has rank 24 and degree
+two, with `CX'=CX`, `CS'=CS`, `O'=CS*O` and:
+
+```text
+A' = A + CS*A + CS*B + CX + CS*CX + CS*O
+B' = B + CS*B + CS*A      + CS*CX + CS*O
+```
+
+On canonical inputs `O=CS*O=CX*CS*O`, so this agrees exactly with the required
+map. Outside that domain it differs from the natural total semantics: inputs
+zero and four merge to zero, for example. This is a measured implementation
+extension, not assigned behavior for reserved codes. A partial truth table has
+no unique full-cube ANF; the degree-three natural extension and degree-two
+nonbijective executor extension are different maps.
+
+Reserved states are NECESSARY in this basis for this contract. If an injective
+twenty-row prefix never leaves the canonical domain, its image is exactly that
+domain. Every next primitive must permute the domain. Complete table inspection
+finds twelve such tables: two data toggles, eight XOR data updates, and
+`plastic(CX,CS,O)`, `plastic(CS,CX,O)`. Every one has form
+`(c,z)->(g(c),L*z+h(c))`, with control output g independent of data and the same
+linear data matrix L for every control code. Composition preserves this form:
+matrices multiply independently of c, and selector-dependent offsets compose.
+The required map has identity data matrix at 000 and swap matrix at 010.
+Consequently some intermediate trajectory must leave the canonical domain.
+
+The regression resamples all primitives and checks this invariant, including
+all pairs of the twelve domain-preserving tables. The all-length step is the
+algebra above. This establishes necessary use of reserved intermediates and a
+sufficient five-bit witness, not a universal redundancy theorem. Five total
+bits are necessary to distinguish twenty admitted inputs and sufficient here;
+minimum dedicated workspace roles is zero. No sixth research carrier was used.
+Necessity of a sixth bit is refuted; any execution-cost benefit is unmeasured.
+
+### Persistence, role transport and only-O intervention
+
+All `120 physical assignments * 20 inputs = 2400` executions pass through the
+actual runtime on temporary counterparts of the five configured file names.
+Memory/policy-named files also carry data or order under these assignments.
+The behavior attaches to relational roles, not semantic filenames.
+
+Each canonical selector is persisted once, then consumed on all four data
+pairs twice while only data files are rewritten: forty reuse executions. A
+separate-process regression writes each selector triple in one Python process,
+then consumes it in forty fresh processes across the five codes and eight data
+trials per code. Five initializers and forty consumers terminate normally.
+Final selector bytes match their original bytes after every execution.
+
+For every `(a,b)` with CX=CS=1:
+
+```text
+O=0: (A',B') = (b,1-a)      X then S
+O=1: (A',B') = (1-b,a)      S then X
+```
+
+Changing only O between selector codes and resetting only data to the same
+pair changes the result on all four pairs under the identical executor.
+This is persisted and causally consumed relative order in this fixed family.
+
+### Flat assignment and code transport
+
+The alternative affine selector map is
+`phi(CX,CS,O)=(CX XOR O,CS,O)`, code table `(0,5,2,7,4,1,6,3)`, its own inverse.
+The flat meanings are `000:I`, `100:X`, `010:S`, `110:X then S`, `011:S then X`.
+Reserved codes are now 001,101,111. This is a changed persistent code assignment,
+not just variable renaming.
+
+Its native twelve-call executor passes every transported input and visits all
+three of its reserved codes. Its actual full-cube extension is rank 24,
+degree two; its transported natural total target remains degree three and
+bijective. Its minimum lies between eight and twelve; shortest counts are
+unknown. Hierarchical minimum lies between nine and eleven. These overlapping
+bounds establish no execution-cost advantage. Both use zero dedicated workspace,
+so there is no demonstrated workspace advantage either.
+
+Prepending and appending ordinary `xor(O,CX)` calls transports the hierarchical
+executor as `phi F phi^-1`. This thirteen-call word matches the complete
+transported implementation table and the twenty required transported outputs.
+The native and conjugated words contribute forty additional real-file trials.
+No result is asserted for all 8! selector permutations or their minimum costs.
+The declared maps, physical assignments and admissible domains are distinct.
+
+### Capability evidence graph and still-external work
+
+```mermaid
+flowchart LR
+  C[Three selector distinctions] --> R[Five represented behaviors]
+  D[Two data distinctions] --> Q[Twenty admissible input distinctions]
+  R --> Q
+  B[Existing toggle XOR plastic basis] --> E[Fixed eleven-call composition]
+  Q --> E
+  U[Reserved intermediate configurations] --> E
+  H[External search retention and sequencing] --> E
+  E --> K[Persistent membership and relative-order selection]
+```
+
+Capacity edges follow counting. The reserved-state edge follows the
+canonical-domain invariant for this basis. The eleven-call node is a verified
+witness, not proof of necessity of that word or length. This adds a conditional
+capability witness to the earlier DAG without replacing chronology.
+
+| Contribution | What still supplies work |
+| --- | --- |
+| Carrier/state | OS persistence of five binary files; harness initialization and twenty-state entry domain. |
+| Transformation law | Unchanged hard-coded toggle, XOR and plastic equations; no order primitive. |
+| Representation/map | Harness assigns inclusion/order, five code meanings, data roles, reserved codes and flat conjugacy. |
+| Sequencing | External solver discovers words; Python harness retains support and chooses every next call, fixed across inputs. |
+| Environment | Harness sets and changes data, chooses process lifetimes; no hidden environmental transition during the executor. |
+| Evaluator | Complete supplied twenty-row criterion, exact selector restoration and equality/transport checks. |
+
+Earned: persistent state represents membership and relative order for a fixed
+two-generator transformation family; reserved encodings provide temporary
+computational freedom in this finite experiment. Unearned: arbitrary operation
+identities, multiple sequence positions, repeated instructions as stored data,
+variable length descriptions, autonomous retention or control, program counter,
+branching, loops, general synthesis, universal interpreter, shortest length/count,
+encoding advantage and a universal slack-as-workspace principle.
+
+No next runtime feature is implemented. The next evidence question is whether
+representational redundancy systematically substitutes for physical workspace
+across additional declared families and maps, before general sequence machinery.
+
+```powershell
+.\.venv\Scripts\python.exe -B composition_experiments.py --order-search --output composition_results.json
+.\.venv\Scripts\python.exe -B -m unittest test_composition_experiments.PersistentOrderTests -v
+.\.venv\Scripts\python.exe -B -m unittest
+```
+
+Ordinary runs retain expensive order certificates. The explicit flag repeats
+bounded searches and all-role live replay. Fresh timeouts do not inherit old
+minimum claims. `validation_results.json` records final results, actual installed
+Pylance diagnostics, unchanged runtime/historical hashes and the complete prior
+82-test validation pass. Previous evidence sections remain structurally unchanged.
+
 ## Reproduction and first-pass validation
 
 Use the explicit repository interpreter:

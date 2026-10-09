@@ -393,5 +393,352 @@ class MechanismReificationTests(unittest.TestCase):
                                      research.states(4)[self.normal[(c << 3) | (a << 2) | (b << 1)]])
 
 
+class FactorizedSelectionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.operations = research.role_complete_basis(5)
+        cls.raw = research.sample_basis(5, cls.operations)
+        cls.basis, cls.aliases = research.canonical_basis(cls.raw)
+        cls.target = research.family_table(research.factorized_family(), True)
+        cls.evidence = json.loads(Path('composition_results.json').read_text(encoding='utf-8'))['factorized_selection']
+
+    def test_complete_target_and_independent_selected_data_composition(self) -> None:
+        expected = (0,1,2,3,4,6,5,7,10,11,8,9,13,15,12,14)
+        self.assertEqual(research.family_table(research.factorized_family()), expected)
+        # Independent runtime mechanisms, including the historical three-XOR swap.
+        toggle = research.sample_program(2, (('toggle',(0,)),))
+        swap = research.sample_program(2, (('xor',(0,1)),('xor',(1,0)),('xor',(0,1))))
+        identity = tuple(range(4))
+        for c0,c1 in research.states(2):
+            self.assertEqual(research.compose(toggle if c0 else identity, swap if c1 else identity),
+                             research.factorized_family()[2*c0+c1])
+        self.assertNotEqual(research.compose(toggle, swap), research.compose(swap, toggle))
+        self.assertEqual(research.compose(toggle,swap),(1,3,0,2))
+        self.assertEqual(research.compose(swap,toggle),(2,0,3,1))
+
+    def test_no_workspace_proof_is_rederived_for_every_four_role_call(self) -> None:
+        target = research.family_table(research.factorized_family())
+        self.assertEqual(len(set(target)),16)
+        self.assertFalse(research.is_affine(target))
+        self.assertEqual(research.algebraic_normal_form(target)['degree'],2)
+        raw = research.sample_basis(4,research.role_complete_basis(4))
+        for table in raw.values():
+            if len(set(table))==16:
+                self.assertTrue(research.is_affine(table))
+            if not research.is_affine(table):
+                self.assertLess(len(set(table)),16)
+
+    def test_symbolic_encoding_matches_every_five_bit_primitive_table(self) -> None:
+        self.assertEqual((len(self.raw),len(self.basis)),(225,175))
+        tables = tuple(self.basis.values())
+        words, evidence = research.symbolic_program_search(5,tuple(range(32)),tables[0],1,
+                                                           max_programs=256,alternatives=tables)
+        self.assertTrue(evidence['enumeration_complete'])
+        self.assertEqual(len(words),175)
+        call_tables = {op:self.raw[name] for name,op in self.operations.items()}
+        self.assertEqual({call_tables[word[0]] for word in words},set(tables))
+        goals=evidence['goal_witnesses']
+        assert isinstance(goals,dict)
+        for index,word in goals.items():
+            self.assertEqual(call_tables[word[0]],tables[index])
+
+    def test_constraint_search_independently_matches_complete_small_enumeration(self) -> None:
+        tables=research.sample_basis(2,research.two_bit_basis())
+        expected=research.shortest_solutions(tables,lambda t:t==(0,2,1,3),3)
+        expected_ops={tuple(research.two_bit_basis()[name] for name in w) for w in expected}
+        words,e=research.symbolic_program_search(2,(0,1,2,3),(0,2,1,3),3)
+        self.assertTrue(e['enumeration_complete'])
+        self.assertEqual(set(words),expected_ops)
+        _, e=research.symbolic_program_search(2,(0,1,2,3),(0,2,1,3),3,max_programs=1)
+        self.assertFalse(e['enumeration_complete'])
+        self.assertEqual(e['stop_reason'],'program storage cap')
+
+    def test_main_minimality_checks_every_length_below_seven(self) -> None:
+        for length in range(7):
+            words,e=research.symbolic_program_search(5,tuple(range(32)),self.target,length,enumerate_all=False)
+            self.assertEqual(words,[])
+            self.assertEqual(e['status'],'unsat')
+            self.assertTrue(e['enumeration_complete'])
+        self.assertEqual(research.sample_program(5,research.factorized_executor()),self.target)
+        self.assertEqual(len(research.factorized_executor()),7)
+
+    def test_all_retained_words_include_every_persistent_effect_and_honest_bounds(self) -> None:
+        for key in ('shortest_witnesses',):
+            item=self.evidence[key]
+            for word in item['retained_canonical_words']:
+                self.assertEqual(research.program_table(tuple(word),self.basis),self.target)
+            if not item['search']['enumeration_complete']:
+                self.assertIsNone(item['exact_total_shortest_count'])
+        flat=self.evidence['flat_comparison']
+        flat_target=research.family_table(research.flat_family(),True)
+        for word in flat['shortest_witnesses']['retained_canonical_words']:
+            self.assertEqual(research.program_table(tuple(word),self.basis),flat_target)
+        self.assertEqual(research.sample_program(5,research.flat_executor()),flat_target)
+        self.assertEqual(flat['minimum_executor_length'],6)
+        self.assertEqual(flat['executable_compression_advantage'],-1)
+        for check in flat['minimal_length_checks'][:6]:
+            self.assertEqual(check['evidence']['status'],'unsat')
+
+    def test_all_physical_assignments_and_arbitrary_workspace_values(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            physical=tuple(Path(directory)/name for name in (
+                '.arxmentis-state','.arxmentis-state-2','.arxmentis-memory','.arxmentis-policy','.arxmentis-policy-1'))
+            for paths in permutations(physical):
+                for i,initial in enumerate(research.states(5)):
+                    self.assertEqual(research.execute(initial,research.factorized_executor(),paths),research.states(5)[self.target[i]])
+
+    def test_reuse_changes_only_data_and_preserves_selector_files_each_step(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths=tuple(Path(directory)/name for name in ('C0','C1','A','B','W'))
+            for c0,c1 in research.states(2):
+                research.execute((c0,c1,0,0,1),(),paths)
+                saved=tuple(p.read_bytes() for p in paths[:2])
+                for a,b in research.states(2)*2:
+                    runtime.write_state(a,paths[2]);runtime.write_state(b,paths[3])
+                    for op in research.factorized_executor():
+                        research.apply_operation(op,paths)
+                        self.assertEqual(tuple(p.read_bytes() for p in paths[:2]),saved)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths),
+                                     (c0,c1,*research.states(2)[research.factorized_family()[2*c0+c1][2*a+b]],0))
+
+    def test_selector_pair_persisted_in_one_process_consumed_in_another(self) -> None:
+        import subprocess
+        import sys
+        initialize="from pathlib import Path; import sys; import arxmentis as r; [r.write_state(int(v),Path(p)) for v,p in zip(sys.argv[1:3],sys.argv[3:])]"
+        consume="from pathlib import Path; import sys; import composition_experiments as r; p=tuple(Path(x) for x in sys.argv[1:]); [r.apply_operation(op,p) for op in r.factorized_executor()]"
+        with tempfile.TemporaryDirectory() as directory:
+            paths=tuple(Path(directory)/name for name in ('C0','C1','A','B','W'))
+            for c0,c1 in research.states(2):
+                subprocess.run([sys.executable,'-B','-c',initialize,str(c0),str(c1),*(str(p) for p in paths[:2])],check=True,capture_output=True)
+                for a,b in ((0,1),(1,0)):
+                    runtime.write_state(a,paths[2]);runtime.write_state(b,paths[3]);runtime.write_state(1,paths[4])
+                    subprocess.run([sys.executable,'-B','-c',consume,*(str(p) for p in paths)],check=True,capture_output=True)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths),
+                                     (c0,c1,*research.states(2)[research.factorized_family()[2*c0+c1][2*a+b]],0))
+
+    def test_all_selector_code_bijections_transport_both_families(self) -> None:
+        from collections import Counter
+        self.assertEqual(len(set(permutations(range(4)))),24)
+        for phi in permutations(range(4)):
+            self.assertTrue(research.is_affine(phi))
+            for family,executor in ((research.factorized_family(),research.factorized_executor()),
+                                    (research.flat_family(),research.flat_executor())):
+                target=research.family_table(research.selector_transport(family,phi),True)
+                word=research.selector_conjugated_executor(executor,phi)
+                self.assertEqual(research.sample_program(5,word),target)
+        self.assertEqual(sum(Counter(len(research.selector_conjugated_executor(research.factorized_executor(),p))
+                                     for p in permutations(range(4))).values()),24)
+
+
+class PersistentOrderTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.operations = research.role_complete_basis(5)
+        cls.raw = research.sample_basis(5, cls.operations)
+        cls.basis, cls.aliases = research.canonical_basis(cls.raw)
+        cls.domain = research.order_domain()
+        cls.target = research.order_target()
+        cls.evidence = json.loads(Path('composition_results.json').read_text(encoding='utf-8'))['persistent_order']
+
+    def test_five_behaviors_information_bound_and_independent_runtime_composition(self) -> None:
+        toggle = research.sample_program(2, (('toggle', (0,)),))
+        swap = research.sample_program(2, (('xor', (0, 1)), ('xor', (1, 0)), ('xor', (0, 1))))
+        family = research.order_family()
+        self.assertEqual(family, (tuple(range(4)), tuple(range(4)), swap, swap, toggle, toggle,
+                                  research.compose(toggle, swap), research.compose(swap, toggle)))
+        self.assertEqual(len(set(family)), 5)
+        self.assertLess(2**2, 5)
+        self.assertGreaterEqual(2**3, 5)
+        for a, b in zip(family[6], family[7], strict=True):
+            self.assertNotEqual(a, b)
+
+    def test_total_target_anf_and_all_length_proof_premises_from_all_runtime_calls(self) -> None:
+        self.assertEqual(self.target, (0,1,2,3,4,5,6,7,8,10,9,11,12,14,13,15,
+                                       18,19,16,17,22,23,20,21,25,27,24,26,30,28,31,29))
+        self.assertEqual(len(set(self.target)), 32)
+        self.assertFalse(research.is_affine(self.target))
+        self.assertEqual(research.algebraic_normal_form(self.target)['degree'], 3)
+        for index, (cx, cs, o, a, b) in enumerate(research.states(5)):
+            expected = (cx, cs, o, a ^ cs*b ^ cs*a ^ cx ^ cx*cs ^ cx*cs*o,
+                                   b ^ cs*b ^ cs*a ^ cx*cs ^ cx*cs*o)
+            self.assertEqual(research.states(5)[self.target[index]], expected)
+        self.assertEqual((len(self.raw), len(self.basis)), (225, 175))
+        for table in self.raw.values():
+            if len(set(table)) == 32:
+                self.assertTrue(research.is_affine(table))
+            if not research.is_affine(table):
+                self.assertLess(len(set(table)), 32)
+
+    def test_partial_domain_breaks_global_noninjectivity_argument_and_rank_pruning_is_safe(self) -> None:
+        self.assertEqual(self.domain, (0,1,2,3,8,9,10,11,16,17,18,19,24,25,26,27,28,29,30,31))
+        self.assertEqual(len({self.target[i] for i in self.domain}), 20)
+        nonlinear = [t for t in self.basis.values() if not research.is_affine(t)]
+        self.assertEqual(len(nonlinear), 60)
+        self.assertEqual(sum(len({t[i] for i in self.domain}) == 20 for t in nonlinear), 6)
+        table = research.sample_program(5, (('plastic', (1, 0, 2)),))
+        self.assertEqual(len(set(table)), 24)
+        self.assertEqual({table[i] for i in self.domain}, set(self.domain))
+        viable = [t for t in self.basis.values() if len(set(t)) >= 20]
+        self.assertEqual(len(viable), 85)
+        for name, op in self.operations.items():
+            if op[0] in ('copy', 'evaluate'):
+                self.assertEqual(len(set(self.raw[name])), 16)
+
+    def test_reserved_states_are_necessary_by_canonical_domain_invariant(self) -> None:
+        allowed = {name:table for name,table in self.basis.items()
+                   if {table[i] for i in self.domain} == set(self.domain)}
+        self.assertEqual(len(allowed), 12)
+        self.assertTrue(all(research.selector_independent_data_linear_part(t,self.domain)
+                            for t in allowed.values()))
+        self.assertFalse(research.selector_independent_data_linear_part(self.target,self.domain))
+        for first in allowed.values():
+            for second in allowed.values():
+                self.assertTrue(research.selector_independent_data_linear_part(
+                    research.compose(first,second),self.domain))
+
+    def test_partial_constraint_search_and_refinement_match_independent_small_enumeration(self) -> None:
+        basis = research.sample_basis(2, research.two_bit_basis())
+        dom, required = (0,1,2), (0,2,1)
+        expected = research.shortest_solutions(basis, lambda t: tuple(t[i] for i in dom) == required, 3)
+        expected_ops = {tuple(research.two_bit_basis()[name] for name in word) for word in expected}
+        for refined in (False, True):
+            words, evidence = research.symbolic_program_search(2, dom, required, 3,
+                incremental_rows=refined, injective_prefixes=True, allowed_schemas=('toggle', 'xor', 'plastic'))
+            self.assertTrue(evidence['enumeration_complete'])
+            self.assertEqual(set(words), expected_ops)
+        # Restricting schemas changes the admitted space; do not label it the full basis.
+        words, evidence = research.symbolic_program_search(2, dom, required, 3,
+                                                           allowed_schemas=('toggle',))
+        self.assertEqual(words, [])
+        self.assertEqual(evidence['status'], 'unsat')
+
+    def test_independent_complete_bfs_and_retained_length_by_length_search_limits(self) -> None:
+        viable = {n:t for n,t in self.basis.items() if len(set(t)) >= 20}
+        layers, counts = research.restricted_frontiers(viable, self.domain, 3, 250_000)
+        self.assertEqual(counts, [1,31,596,9123])
+        required = bytes(self.target[i] for i in self.domain)
+        self.assertTrue(all(required not in layer for layer in layers))
+        checks = self.evidence['search_records']['hierarchical']['records']
+        for length in range(9):
+            self.assertEqual(checks[length]['evidence']['status'], 'unsat')
+            self.assertTrue(checks[length]['evidence']['enumeration_complete'])
+        for check in checks[9:]:
+            if check['evidence']['status'] == 'unknown':
+                self.assertFalse(check['evidence']['enumeration_complete'])
+        self.assertIsNone(self.evidence['executor']['minimum_length'])
+        self.assertIsNone(self.evidence['executor']['exact_shortest_count'])
+
+    def test_fixed_word_all_persistent_effects_and_restricted_prefix_rank(self) -> None:
+        word = research.order_executor()
+        actual = research.sample_program(5, word)
+        self.assertEqual(len(word), 11)
+        self.assertEqual(tuple(actual[i] for i in self.domain), tuple(self.target[i] for i in self.domain))
+        self.assertLess(len(set(actual)), 32)
+        trace = research.trace_restricted_program(self.domain, word)
+        self.assertTrue(all(row['prefix_restricted_image_size'] == 20 for row in trace))
+        self.assertTrue(all(row['restricted_primitive_injective'] for row in trace))
+        self.assertTrue(any(row['reserved_selector_visits'] for row in trace))
+        for row in trace:
+            incoming = row['incoming_reachable_indices']
+            assert isinstance(incoming, tuple)
+            self.assertTrue(all(len({(i >> bit) & 1 for i in incoming}) == 2 for bit in range(5)))
+
+    def test_all_120_physical_assignments_all_20_canonical_states(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            physical = tuple(Path(directory) / name for name in (
+                '.arxmentis-state', '.arxmentis-state-2', '.arxmentis-memory',
+                '.arxmentis-policy', '.arxmentis-policy-1'))
+            rows = 0
+            for paths in permutations(physical):
+                for i in self.domain:
+                    self.assertEqual(research.execute(research.states(5)[i], research.order_executor(), paths),
+                                     research.states(5)[self.target[i]])
+                    rows += 1
+            self.assertEqual(rows, 2400)
+
+    def test_persisted_selectors_reused_with_data_only_changes_and_exit_restoration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / name for name in ('CX', 'CS', 'O', 'A', 'B'))
+            for code in (0,2,4,6,7):
+                research.execute((*research.states(3)[code], 0, 0), (), paths)
+                saved = tuple(p.read_bytes() for p in paths[:3])
+                for a,b in research.states(2) * 2:
+                    runtime.write_state(a, paths[3]); runtime.write_state(b, paths[4])
+                    for operation in research.order_executor():
+                        research.apply_operation(operation, paths)
+                    self.assertEqual(tuple(p.read_bytes() for p in paths[:3]), saved)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths),
+                                     research.states(5)[self.target[4*code+2*a+b]])
+
+    def test_only_order_bit_change_selects_opposite_order_on_all_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for a,b in research.states(2):
+                research.execute((1,1,0,a,b), research.order_executor(), paths)
+                first = tuple(runtime.read_state(p) for p in paths)
+                runtime.write_state(1, paths[2])
+                runtime.write_state(a, paths[3]); runtime.write_state(b, paths[4])
+                for op in research.order_executor():
+                    research.apply_operation(op, paths)
+                second = tuple(runtime.read_state(p) for p in paths)
+                self.assertEqual(first, (1,1,0,b,1-a))
+                self.assertEqual(second, (1,1,1,1-b,a))
+                self.assertNotEqual(first[3:], second[3:])
+
+    def test_selector_written_in_one_process_consumed_and_reused_in_fresh_processes(self) -> None:
+        import subprocess
+        import sys
+        initialize = "from pathlib import Path; import sys; import arxmentis as r; [r.write_state(int(v),Path(p)) for v,p in zip(sys.argv[1:4],sys.argv[4:])]"
+        consume = "from pathlib import Path; import sys; import composition_experiments as r; p=tuple(Path(x) for x in sys.argv[1:]); [r.apply_operation(op,p) for op in r.order_executor()]"
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for code in (0,2,4,6,7):
+                subprocess.run([sys.executable,'-B','-c',initialize,*(str(v) for v in research.states(3)[code]),
+                                *(str(p) for p in paths[:3])],check=True,capture_output=True)
+                saved = tuple(p.read_bytes() for p in paths[:3])
+                for a,b in research.states(2) * 2:
+                    runtime.write_state(a,paths[3]); runtime.write_state(b,paths[4])
+                    subprocess.run([sys.executable,'-B','-c',consume,*(str(p) for p in paths)],
+                                   check=True,capture_output=True)
+                    self.assertEqual(tuple(p.read_bytes() for p in paths[:3]),saved)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths),
+                                     research.states(5)[self.target[4*code+2*a+b]])
+
+    def test_flat_assignment_transport_real_files_and_reserved_codes_are_map_relative(self) -> None:
+        phi = research.order_flat_recoding()
+        self.assertEqual(phi,(0,5,2,7,4,1,6,3))
+        self.assertTrue(research.is_affine(phi))
+        dom = tuple(sorted((phi[i >> 2] << 2) | (i & 3) for i in self.domain))
+        self.assertEqual({i >> 2 for i in dom},{0,2,3,4,6})
+        target = research.transport_selector_cube(self.target,phi)
+        actual = research.sample_program(5,research.order_flat_executor())
+        self.assertTrue(all(actual[i] == target[i] for i in dom))
+        transported = (('xor',(2,0)),*research.order_executor(),('xor',(2,0)))
+        self.assertEqual(research.sample_program(5,transported),
+                         research.transport_selector_cube(research.sample_program(5,research.order_executor()),phi))
+        trace = research.trace_restricted_program(dom,research.order_flat_executor(),(1,5,7))
+        self.assertTrue(any(row['reserved_selector_visits'] for row in trace))
+        self.assertEqual(research.algebraic_normal_form(target)['degree'],3)
+        self.assertFalse(self.evidence['flat_comparison']['executable_advantage_established'])
+
+    def test_evidence_preserves_history_and_separates_contract_from_total_extension(self) -> None:
+        import hashlib
+        import json
+        artifact = json.loads(Path('composition_results.json').read_text(encoding='utf-8'))
+        old = self.evidence['preserved_previous_sections_sha256']
+        for key,expected in old.items():
+            actual = hashlib.sha256(json.dumps(artifact[key],sort_keys=True).encode()).hexdigest()
+            self.assertEqual(actual,expected)
+        for name,expected in (
+            ('arxmentis.py','94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f'),
+            ('test_arxmentis.py','0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b')):
+            self.assertEqual(hashlib.sha256(Path(name).read_bytes()).hexdigest(),expected)
+        self.assertTrue(self.evidence['total_semantics']['all_length_impossible'])
+        self.assertEqual(self.evidence['executor']['minimum_dedicated_workspace_bits_for_restricted_contract'],0)
+        self.assertEqual(self.evidence['runtime_replay']['remapping_rows'],2400)
+
+
 if __name__ == "__main__":
     unittest.main()

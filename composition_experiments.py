@@ -12,6 +12,7 @@ import tempfile
 from collections.abc import Callable, Sequence
 from itertools import permutations, product
 from pathlib import Path
+from typing import cast
 
 import arxmentis as runtime
 
@@ -643,6 +644,654 @@ def mechanism_reification_experiment(retained: dict[Table, Program]) -> dict[str
     }
 
 
+def factorized_family() -> tuple[Table, ...]:
+    """Selector index 2*C0+C1; execution order X then S (S composed with X)."""
+    return tuple(tuple(((b << 1) | (a ^ c0)) if c1 else (((a ^ c0) << 1) | b)
+                       for a, b in states(2)) for c0, c1 in states(2))
+
+
+def flat_family() -> tuple[Table, ...]:
+    """Lookup comparator differs only at code 11: X after S, rather than S after X.
+
+    This supplied lookup collapses to the opposite-order factorization. That is
+    a result, not evidence that flat lookup is intrinsically unstructured.
+    """
+    return ((0, 1, 2, 3), (0, 2, 1, 3), (2, 3, 0, 1), (2, 0, 3, 1))
+
+
+def flat_executor() -> tuple[Operation, ...]:
+    return (("evaluate", (2, 3, 4)), ("evaluate", (0, 4, 3)),
+            ("plastic", (2, 4, 1)), ("evaluate", (3, 4, 2)),
+            ("xor", (2, 3)), ("xor", (3, 4)))
+
+
+def selector_transport(family: Sequence[Table], permutation: Table) -> tuple[Table, ...]:
+    """phi acts on selector codes alone: physical code phi(old code)."""
+    if sorted(permutation) != list(range(4)):
+        raise ValueError("Selector map must be a bijection on four codes")
+    inverse = tuple(permutation.index(i) for i in range(4))
+    return tuple(family[inverse[i]] for i in range(4))
+
+
+def selector_conjugated_executor(operations: Sequence[Operation], permutation: Table) -> tuple[Operation, ...]:
+    """Transport uses phi^-1 first, original executor, then phi."""
+    b = two_bit_basis()
+    closure2, _, saturated = closure(sample_basis(2, b), 8)
+    if not saturated or permutation not in closure2:
+        raise AssertionError("Selector permutation has no established support")
+    inverse = tuple(permutation.index(i) for i in range(4))
+    return tuple(b[name] for name in closure2[inverse]) + tuple(operations) + tuple(b[name] for name in closure2[permutation])
+
+
+def family_table(family: Sequence[Table], workspace: bool = False) -> Table:
+    """Preserve selectors and apply their extensional data map; discard old W."""
+    if len(family) != 4 or any(sorted(table) != list(range(4)) for table in family):
+        raise ValueError("Declare four data permutations")
+    target = tuple((code << 2) | family[code][data] for code in range(4) for data in range(4))
+    return tuple(2 * target[i // 2] for i in range(32)) if workspace else target
+
+
+def factorized_executor() -> tuple[Operation, ...]:
+    """Known upper bound, never a special-case search restriction."""
+    roles = (1, 2, 3, 4)  # Prior C,A,B,W are now C1,A,B,W.
+    return (("xor", (0, 2)),) + tuple((kind, tuple(roles[i] for i in indices))
+                                    for kind, indices in selected_swap_workspace_program())
+
+
+def symbolic_program_search(width: int, initial: Table, target: Table, length: int,
+                            max_programs: int = 128, timeout_ms: int = 120_000,
+                            enumerate_all: bool = True,
+                            alternatives: Sequence[Table] | None = None,
+                            wall_seconds: float = 180.0,
+                            allowed_schemas: Sequence[str] | None = None,
+                            incremental_rows: bool = False,
+                            injective_prefixes: bool = False) -> tuple[list[tuple[Operation, ...]], dict[str, object]]:
+    """Exact finite-word constraint search, an external meta-tool.
+
+    A single operation choice per position is shared by EVERY declared input.
+    Whole-coordinate bitplanes encode all persistent effects, including copy.
+    Canonical schemas omit memory/XOR and evaluator-input-order aliases only.
+    UNKNOWN/timeout never means absence or completeness. Model blocking
+    projects on operation choices, so each returned word appears once.
+    """
+    import time
+    import z3
+    if width < 2 or width > 5 or len(initial) != len(target) or length < 0:
+        raise ValueError("Invalid finite search domain")
+    rows = len(initial)
+    if injective_prefixes and (len(set(initial)) != rows or len(set(target)) != rows):
+        raise ValueError("Prefix injectivity is admissible only for an injective declared contract")
+    solver = z3.SolverFor("QF_BV")
+    solver.set(timeout=timeout_ms, random_seed=0)
+    full = (1 << rows) - 1
+    planes: list[z3.BitVecRef] = [z3.BitVecVal(sum(((state >> (width - 1 - j)) & 1) << r
+                              for r, state in enumerate(initial)), rows) for j in range(width)]
+    choices = []
+    for step in range(length):
+        kind, d, t, m = (z3.BitVec(f"op_{step}_{name}", 3) for name in ("kind", "d", "t", "m"))
+        choices.append((kind, d, t, m))
+        if allowed_schemas is not None:
+            schema_indices = [("toggle", "xor", "copy", "evaluate", "plastic").index(name)
+                              for name in allowed_schemas]
+            solver.add(z3.Or(*(kind == index for index in schema_indices)))
+        solver.add(z3.ULT(kind, 5), z3.ULT(d, width), z3.ULT(t, width), z3.ULT(m, width))
+        # Canonical calls: toggle fixes unused roles; xor fixes its unused m.
+        solver.add(z3.Implies(kind == 0, z3.And(t == 0, m == 0)))
+        solver.add(z3.Implies(kind == 1, z3.And(d != t, m == 0)))
+        solver.add(z3.Implies(z3.UGE(kind, 2), z3.And(d != t, d != m, t != m)))
+        solver.add(z3.Implies(kind == 3, z3.ULT(d, t)))
+        def select(index: z3.BitVecRef) -> z3.BitVecRef:
+            result = planes[-1]
+            for j in range(width - 2, -1, -1):
+                result = cast(z3.BitVecRef, z3.If(index == j, planes[j], result))
+            return cast(z3.BitVecRef, result)
+        driver, old_target, selector = select(d), select(t), select(m)
+        outputs: list[z3.BitVecRef] = []
+        for j in range(width):
+            expression = z3.If(kind == 0, z3.If(d == j, planes[j] ^ full, planes[j]),
+                         z3.If(kind == 1, z3.If(t == j, driver ^ old_target, planes[j]),
+                         z3.If(kind == 2, z3.If(t == j, driver, z3.If(m == j, old_target, planes[j])),
+                         z3.If(kind == 3, z3.If(m == j, driver ^ old_target, planes[j]),
+                               z3.If(t == j, driver ^ (old_target & ~selector), planes[j])))))
+            output = z3.BitVec(f"plane_{step}_{j}", rows)
+            solver.add(output == expression)
+            outputs.append(output)
+        if injective_prefixes:
+            encoded_rows = [z3.Concat(*(z3.Extract(row, row, plane) for plane in outputs))
+                            for row in range(rows)]
+            solver.add(z3.Distinct(*encoded_rows))
+        planes = outputs
+    goal_targets = (target,) if alternatives is None else tuple(alternatives)
+    goal = z3.BitVec("goal", max(1, (len(goal_targets) - 1).bit_length()))
+    asserted_rows = {0} if incremental_rows else set(range(rows))
+    refinement_checks = 0
+    if incremental_rows:
+        if alternatives is not None:
+            raise ValueError("Incremental row refinement currently requires one target")
+        solver.add(goal == 0)
+        for j, plane in enumerate(planes):
+            solver.add((plane & 1) == ((target[0] >> (width - 1 - j)) & 1))
+    else:
+        solver.add(z3.Or(*(z3.And(goal == g, *(plane == sum(((state >> (width - 1 - j)) & 1) << r
+                                                            for r, state in enumerate(required))
+                                              for j, plane in enumerate(planes)))
+                           for g, required in enumerate(goal_targets))))
+    words: list[tuple[Operation, ...]] = []
+    goal_witnesses: dict[int, tuple[Operation, ...]] = {}
+    started = time.perf_counter()
+    status = "unknown"
+    complete = False
+    stop_reason = None
+    while True:
+        remaining_ms = int(1000 * (wall_seconds - (time.perf_counter() - started)))
+        if remaining_ms <= 0:
+            stop_reason = "wall time cap"
+            break
+        solver.set(timeout=min(timeout_ms, remaining_ms))
+        result = solver.check()
+        if result == z3.unsat:
+            status = "sat" if words else "unsat"
+            complete = True
+            break
+        if result != z3.sat:
+            status = "unknown"
+            stop_reason = solver.reason_unknown()
+            break
+        model = solver.model()
+        if incremental_rows:
+            output_planes = [cast(z3.BitVecNumRef, model.eval(plane, model_completion=True)).as_long()
+                             for plane in planes]
+            concrete_outputs = tuple(sum(((plane >> row) & 1) << (width - 1 - j)
+                                for j, plane in enumerate(output_planes)) for row in range(rows))
+            mismatch = next((row for row in range(rows) if concrete_outputs[row] != target[row]), None)
+            if mismatch is not None:
+                bit = 1 << mismatch
+                for j, plane in enumerate(planes):
+                    solver.add((plane & bit) == (((target[mismatch] >> (width - 1 - j)) & 1) << mismatch))
+                asserted_rows.add(mismatch)
+                refinement_checks += 1
+                continue
+        assignments = [tuple(cast(z3.BitVecNumRef, model.eval(v, model_completion=True)).as_long() for v in choice) for choice in choices]
+        word: list[Operation] = []
+        for k, d_value, t_value, m_value in assignments:
+            schema = ("toggle", "xor", "copy", "evaluate", "plastic")[k]
+            roles = ((d_value,) if k == 0 else (d_value, t_value) if k == 1
+                     else (d_value, t_value, m_value))
+            word.append((schema, roles))
+        words.append(tuple(word))
+        goal_index = cast(z3.BitVecNumRef, model.eval(goal, model_completion=True)).as_long()
+        goal_witnesses[goal_index] = tuple(word)
+        if len(words) % 10 == 0:
+            print(f"constraint search length={length}: {len(words)} words retained", flush=True)
+        status = "sat"
+        if not enumerate_all or len(words) >= max_programs:
+            stop_reason = "one witness requested" if not enumerate_all else "program storage cap"
+            break
+        if alternatives is not None:
+            solver.add(goal != goal_index)
+        else:
+            solver.add(z3.Or(*(variable != value for choice, values in zip(choices, assignments, strict=True)
+                               for variable, value in zip(choice, values, strict=True))))
+    return sorted(words), {"method": "complete finite bit-vector constraint search",
+                          "width": width, "domain_rows": rows, "length": length,
+                          "allowed_schemas": list(allowed_schemas) if allowed_schemas is not None else None,
+                          "incremental_rows": incremental_rows, "injective_prefixes": injective_prefixes, "asserted_row_count": len(asserted_rows),
+                          "refinement_checks": refinement_checks,
+                          "solver_version": z3.get_version_string(), "timeout_per_check_ms": timeout_ms,
+                          "program_storage_cap": max_programs, "status": status,
+                          "enumeration_complete": complete, "programs_retained": len(words), "goal_witnesses": goal_witnesses,
+                          "seconds": round(time.perf_counter() - started, 3),
+                          "unknown_reason": solver.reason_unknown() if status == "unknown" else None,
+                          "wall_seconds_cap": wall_seconds, "stop_reason": stop_reason,
+                          "frontier_sizes": None,
+                          "frontier_note": "constraint search represents all words at this exact length; no materialized BFS frontier"}
+
+
+def factorized_selection_experiment(search_records: dict[str, object]) -> dict[str, object]:
+    """Evidence assembly in the same format; search records remain external support."""
+    import inspect
+    ops4 = role_complete_basis(4)
+    raw4 = sample_basis(4, ops4)
+    ops5 = role_complete_basis(5)
+    raw5 = sample_basis(5, ops5)
+    basis5, aliases5 = canonical_basis(raw5)
+    target = family_table(factorized_family())
+    assert sorted(target) == list(range(16)) and not is_affine(target)
+    assert all(is_affine(t) for t in raw4.values() if len(set(t)) == 16)
+    selected = factorized_executor()
+    full_target = family_table(factorized_family(), True)
+    assert sample_program(5, selected) == full_target
+    flat_target = family_table(flat_family(), True)
+    assert sample_program(5, flat_executor()) == flat_target
+    schema_names = {(kind, roles): name for name, (kind, roles) in ops5.items()}
+
+    def witness_summary(key: str, required: Table) -> dict[str, object]:
+        data = search_records[key]
+        if not isinstance(data, dict):
+            raise ValueError("Expected retained search record")
+        words = [tuple((kind, tuple(roles)) for kind, roles in word) for word in data['words']]
+        classes = set()
+        labels: list[Program] = []
+        canonical_words: list[Program] = []
+        for word in words:
+            table = tuple(range(32))
+            names = []
+            for operation in word:
+                op_table = raw5[schema_names[operation]]
+                name = next(n for n, t in basis5.items() if t == op_table)
+                names.append(name)
+                table = compose(table, op_table)
+            assert table == required
+            classes.add(table)
+            canonical_words.append(tuple(names))
+            labels.extend(product(*(aliases5[name] for name in names)))
+        return {'search': data['evidence'], 'retained_canonical_words': canonical_words,
+                'retained_raw_label_words': sorted(set(labels)),
+                'canonical_count_lower_bound': len(words), 'labeled_count_lower_bound': len(set(labels)),
+                'exact_total_shortest_count': len(words) if data['evidence']['enumeration_complete'] else None,
+                'full_behavioral_classes': len(classes),
+                'class_scope': 'All valid words have this same complete 32-row map by the total-domain criterion.'}
+
+    transport_rows = []
+    flat_transport_rows = []
+    for phi in permutations(range(4)):
+        assert is_affine(phi)
+        for family, executor, destination in (
+            (factorized_family(), selected, transport_rows), (flat_family(), flat_executor(), flat_transport_rows),
+        ):
+            transported_family = selector_transport(family, phi)
+            word = selector_conjugated_executor(executor, phi)
+            required = family_table(transported_family, True)
+            assert sample_program(5, word) == required
+            destination.append({'selector_permutation': phi, 'affine': True,
+                                'executor': word, 'witness_length_upper_bound': len(word),
+                                'target': required, 'real_file_rows': 32})
+    physical_rows = 0
+    reuse_rows = 0
+    with tempfile.TemporaryDirectory() as directory:
+        physical = tuple(Path(directory) / name for name in (
+            '.arxmentis-state', '.arxmentis-state-2', '.arxmentis-memory', '.arxmentis-policy', '.arxmentis-policy-1'))
+        for paths in permutations(physical):
+            for i, initial in enumerate(states(5)):
+                assert execute(initial, selected, paths) == states(5)[full_target[i]]
+                physical_rows += 1
+        for c0, c1 in states(2):
+            execute((c0, c1, 0, 0, 1), (), physical)
+            saved = tuple(p.read_bytes() for p in physical[:2])
+            for a, b in states(2) * 2:
+                runtime.write_state(a, physical[2])
+                runtime.write_state(b, physical[3])
+                for operation in selected:
+                    apply_operation(operation, physical)
+                    assert tuple(p.read_bytes() for p in physical[:2]) == saved
+                expected = (c0, c1, *states(2)[factorized_family()[2 * c0 + c1][2 * a + b]], 0)
+                assert tuple(runtime.read_state(p) for p in physical) == expected
+                reuse_rows += 1
+    identity, swap, toggle_a, swap_after_toggle = factorized_family()
+    assert compose(toggle_a, swap) == swap_after_toggle
+    opposite = compose(swap, toggle_a)
+    assert opposite != swap_after_toggle and opposite == flat_family()[3]
+    for c0, c1 in states(2):
+        contribution = compose(toggle_a if c0 else identity, swap if c1 else identity)
+        assert contribution == factorized_family()[2 * c0 + c1]
+    return {
+        'roles': ['C0', 'C1', 'A', 'B', 'W'],
+        'convention': 'selector index=2*C0+C1; program order X then S; compose(first,second)=second after first',
+        'selector_meanings': ['IDENTITY', 'S', 'X', 'S after X'],
+        'family': factorized_family(), 'target_four_bit': table_properties(target), 'target_rows': table_rows(target, 4),
+        'target_five_bit': table_properties(full_target),
+        'workspace_contract': 'all 32 initial states; discard arbitrary old W; final W=0',
+        'no_workspace': {'proven_impossible_all_lengths': True,
+                         'basis_operations': ops4, 'properties': {name: table_properties(t) for name, t in raw4.items()},
+                         'proof': 'A first noninjective factor irreversibly merges total-cube inputs. Every bijective factor is affine, so every realizable total bijection is affine. Target is a nonaffine bijection.'},
+        'minimum_workspace_bits': 1,
+        'basis_five_bit': {'operations': ops5, 'raw_count': len(raw5), 'canonical_count': len(basis5),
+                           'canonical_tables': basis5, 'aliases': aliases5,
+                           'properties': {name: table_properties(t) for name, t in raw5.items()}},
+        'minimum_executor_length': 7, 'selected_executor': selected,
+        'minimal_length_checks': search_records['main_minimum'],
+        'shortest_witnesses': witness_summary('main_enumeration', full_target),
+        'encoding_independent_runtime_check': search_records['encoding_check'],
+        'composition_law': {'X': toggle_a, 'S': swap, 'code_11': swap_after_toggle,
+                            'independent_composition': compose(toggle_a, swap), 'opposite_order': opposite,
+                            'differing_data_indices': [i for i in range(4) if opposite[i] != swap_after_toggle[i]],
+                            'order_source': 'executor structure; selector bits determine inclusion only'},
+        'regressions': {'physical_assignments': 120, 'physical_full_state_rows': physical_rows,
+                        'persistent_reuse_executions': reuse_rows,
+                        'selectors_preserved_every_selected_primitive': True},
+        'selector_transport': {'definition': 'phi on selectors alone; F_phi=phi F phi^-1',
+                               'all_24_affine': True, 'all_24_realizable': True,
+                               'recodings': transport_rows, 'bounded_joint_search': search_records['transport_search'],
+                               'minimum_lengths_all_24_established': False,
+                               'grouping_scope': 'witness length upper bounds, not universal minimum lengths'},
+        'flat_comparison': {'family': flat_family(), 'meanings': ['IDENTITY','S','X','X after S'],
+                            'selection_rationale': 'Change only code 11 to the measured opposite order; keep component data maps and degree controlled.',
+                            'target_four_bit': table_properties(family_table(flat_family())),
+                            'minimum_workspace_bits': 1, 'minimum_executor_length': 6,
+                            'selected_executor': flat_executor(), 'minimal_length_checks': search_records['flat_minimum'],
+                            'shortest_witnesses': witness_summary('flat_enumeration', flat_target),
+                            'all_24_transported_recodings': flat_transport_rows,
+                            'factorization_discovered': 'This lookup itself equals S^C1 then X^C0; flat versus factorized is not an intrinsic carrier type.',
+                            'executable_compression_advantage': -1,
+                            'comparison_limit': 'Main seven versus opposite-order lookup six; order-specific cost, not a universal flat/factorized distinction.'},
+        'additional_unrelated_flat_probe': {'family': ((0,1,2,3),(0,2,1,3),(2,3,0,1),(1,0,3,2)),
+                                           'target_four_bit': table_properties(family_table(((0,1,2,3),(0,2,1,3),(2,3,0,1),(1,0,3,2)))),
+                                           'search': search_records['cubic_flat_probe'],
+                                           'realizability_with_one_workspace': 'unresolved; not found through timed length-eight queries is not impossibility',
+                                           'minimum_length': None, 'compression_comparison': 'unresolved'},
+        'search_source_sha256': hashlib.sha256(inspect.getsource(symbolic_program_search).encode()).hexdigest(),
+        'earned_claim': 'Two persisted selector bits factorize four effective data transformations by inclusion of X and S; one fixed externally supplied executor composes their effects in externally supplied order.',
+        'external_contributions': {'carrier_state': 'initialization, data interventions, five existing capacities, expendable W',
+                                   'laws': 'unchanged low-level runtime maps; solver formalization independently replayed',
+                                   'representation': 'assigned selector meanings and recoding maps',
+                                   'sequencing': 'external synthesis, witness storage, invocation, fixed order, process schedule and stopping',
+                                   'environment': 'temporary persistent file backend and external data',
+                                   'evaluator': 'complete target table, preserved selectors and workspace normalization'},
+        'unearned': ['arbitrary sequences as data','selector-controlled ordering','variable length programs',
+                    'stored primitive identities','instruction pointer','general interpreter','endogenous synthesis',
+                    'autonomous execution','self-modification'],
+        'next_boundary': 'Can persistent state encode order as well as inclusion? Not implemented.',
+    }
+
+
+def order_family() -> tuple[Table, ...]:
+    """Total natural semantics; selector index 4*CX+2*CS+O, data index 2*A+B."""
+    identity, swap, toggle_a, swap_after_toggle = factorized_family()
+    opposite = compose(swap, toggle_a)
+    return (identity, identity, swap, swap, toggle_a, toggle_a, swap_after_toggle, opposite)
+
+
+def order_target() -> Table:
+    return tuple((code << 2) | order_family()[code][data]
+                 for code in range(8) for data in range(4))
+
+
+def order_domain() -> Table:
+    """Only canonical selector codes at entry and exit; ascending full-state indices."""
+    return tuple((code << 2) | data for code in (0, 2, 4, 6, 7) for data in range(4))
+
+
+def order_flat_recoding() -> Table:
+    """Explicit affine code permutation: phi(CX,CS,O)=(CX XOR O,CS,O)."""
+    return tuple(code ^ (4 if code & 1 else 0) for code in range(8))
+
+
+def transport_selector_cube(table: Table, permutation: Table) -> Table:
+    """Conjugate only the three selector bits; preserve physical data encoding."""
+    if len(table) != 32 or sorted(permutation) != list(range(8)):
+        raise ValueError("Declare a full three-bit selector permutation")
+    inverse = tuple(permutation.index(i) for i in range(8))
+    result = []
+    for physical in range(32):
+        old = (inverse[physical >> 2] << 2) | (physical & 3)
+        output = table[old]
+        result.append((permutation[output >> 2] << 2) | (output & 3))
+    return tuple(result)
+
+
+def trace_restricted_program(initial: Table, operations: Sequence[Operation],
+                             reserved_codes: Sequence[int] = (1, 3, 5)) -> list[dict[str, object]]:
+    """Keep actual full-cube maps, restricted images, collisions and reserved-code visits."""
+    prefix = tuple(range(32))
+    current = initial
+    rows: list[dict[str, object]] = []
+    for step, operation in enumerate(operations, 1):
+        primitive = sample_program(5, (operation,))
+        next_image = tuple(primitive[state] for state in current)
+        prefix = compose(prefix, primitive)
+        rows.append({'step': step, 'operation': operation,
+                     'primitive_full_image_size': len(set(primitive)),
+                     'incoming_reachable_indices': current,
+                     'restricted_primitive_injective': len(set(next_image)) == len(current),
+                     'outgoing_reachable_indices': next_image,
+                     'prefix_full_image_size': len(set(prefix)),
+                     'prefix_restricted_image_size': len(set(next_image)),
+                     'reserved_selector_visits': [{'initial_index': i, 'intermediate_index': result,
+                                                    'selector_code': result >> 2}
+                                                  for i,result in zip(initial,next_image,strict=True)
+                                                  if result >> 2 in reserved_codes]})
+        current = next_image
+    return rows
+
+
+def order_executor() -> tuple[Operation, ...]:
+    """Externally discovered fixed word; five roles CX,CS,O,A,B, no workspace."""
+    return (('xor', (0, 3)), ('xor', (4, 3)), ('xor', (3, 2)), ('xor', (3, 4)), ('toggle', (1,)), ('plastic', (3, 2, 1)), ('xor', (2, 4)), ('plastic', (3, 2, 1)), ('xor', (3, 2)), ('toggle', (1,)), ('xor', (4, 3)))
+
+
+def order_flat_executor() -> tuple[Operation, ...]:
+    """Witness for phi(CX,CS,O)=(CX XOR O,CS,O); no minimum claim."""
+    return (('toggle', (1,)), ('xor', (4, 3)), ('xor', (0, 3)), ('xor', (1, 2)), ('plastic', (3, 2, 1)), ('plastic', (4, 2, 1)), ('plastic', (3, 4, 1)), ('xor', (2, 3)), ('plastic', (2, 4, 1)), ('plastic', (2, 4, 1)), ('xor', (4, 2)), ('toggle', (1,)))
+
+
+def selector_independent_data_linear_part(table: Table, domain: Table) -> bool:
+    """Check the invariant (c,z)->(g(c),L*z+h(c)), with one shared data matrix L."""
+    signatures = []
+    for code in sorted({i >> 2 for i in domain}):
+        outputs = tuple(table[4*code+data] for data in range(4))
+        if len({value >> 2 for value in outputs}) != 1:
+            return False
+        differences = tuple((value & 3) ^ (outputs[0] & 3) for value in outputs)
+        if differences[3] != differences[1] ^ differences[2]:
+            return False
+        signatures.append(differences)
+    return len(set(signatures)) == 1
+
+
+def persistent_order_experiment(search_records: dict[str, object]) -> dict[str, object]:
+    """Audit the partial specification against real runtime tables and files."""
+    calls = role_complete_basis(5)
+    raw = sample_basis(5, calls)
+    basis, aliases = canonical_basis(raw)
+    target, domain = order_target(), order_domain()
+    required = tuple(target[i] for i in domain)
+    assert len(set(target)) == 32 and not is_affine(target)
+    assert all(is_affine(table) for table in raw.values() if len(set(table)) == 32)
+    assert all(len(set(table)) < 32 for table in raw.values() if not is_affine(table))
+    # Rank <=16 can never be followed by an injective twenty-output map.
+    viable = {name: table for name, table in basis.items() if len(set(table)) >= 20}
+    layers, counts = restricted_frontiers(viable, domain, 3, 250_000)
+    assert all(bytes(required) not in layer for layer in layers)
+    canonical_only = {name: table for name, table in basis.items()
+                      if {table[i] for i in domain} == set(domain)}
+    assert all(selector_independent_data_linear_part(table, domain) for table in canonical_only.values())
+    assert not selector_independent_data_linear_part(target, domain)
+    selected = order_executor()
+    actual = sample_program(5, selected)
+    assert tuple(actual[i] for i in domain) == required
+    trace = trace_restricted_program(domain, selected)
+    for row in trace:
+        incoming = cast(Table, row['incoming_reachable_indices'])
+        row['all_nonaffine_primitive_restricted_image_sizes'] = {
+            name: len({table[i] for i in incoming})
+            for name, table in basis.items() if not is_affine(table)}
+        assert row['prefix_restricted_image_size'] == 20
+        assert row['restricted_primitive_injective']
+        # A single globally clean bit would leave at most sixteen configurations.
+        assert all(len({(i >> bit) & 1 for i in incoming}) == 2 for bit in range(5))
+    phi = order_flat_recoding()
+    flat_domain = tuple(sorted((phi[i >> 2] << 2) | (i & 3) for i in domain))
+    flat_target = transport_selector_cube(target, phi)
+    flat_actual = sample_program(5, order_flat_executor())
+    assert all(flat_actual[i] == flat_target[i] for i in flat_domain)
+    # Transport uses two ordinary XOR calls, never a harness selector branch.
+    conjugated = (('xor', (2, 0)), *selected, ('xor', (2, 0)))
+    assert sample_program(5, conjugated) == transport_selector_cube(actual, phi)
+    remap_rows = reuse_rows = flat_rows = 0
+    with tempfile.TemporaryDirectory() as directory:
+        physical = tuple(Path(directory) / name for name in (
+            '.arxmentis-state', '.arxmentis-state-2', '.arxmentis-memory',
+            '.arxmentis-policy', '.arxmentis-policy-1'))
+        for paths in permutations(physical):
+            for i in domain:
+                assert execute(states(5)[i], selected, paths) == states(5)[target[i]]
+                remap_rows += 1
+        for code in (0, 2, 4, 6, 7):
+            paths = physical
+            execute((*states(3)[code], 0, 0), (), paths)
+            saved = tuple(path.read_bytes() for path in paths[:3])
+            for a, b in states(2) * 2:
+                runtime.write_state(a, paths[3]); runtime.write_state(b, paths[4])
+                for operation in selected:
+                    apply_operation(operation, paths)
+                assert tuple(path.read_bytes() for path in paths[:3]) == saved
+                assert tuple(runtime.read_state(p) for p in paths) == states(5)[target[4*code+2*a+b]]
+                reuse_rows += 1
+        for i in flat_domain:
+            assert execute(states(5)[i], order_flat_executor(), physical) == states(5)[flat_target[i]]
+            assert execute(states(5)[i], conjugated, physical) == states(5)[flat_target[i]]
+            flat_rows += 2
+    restrictions = {name: len({table[i] for i in domain}) for name, table in basis.items()
+                    if not is_affine(table)}
+    counterexample = sample_program(5, (('plastic', (1, 0, 2)),))
+    assert len(set(counterexample)) == 24 and len({counterexample[i] for i in domain}) == 20
+    lower_bounds = {}
+    for label in ('hierarchical', 'flat'):
+        checks = cast(dict[str, object], search_records[label])['records']
+        proved: set[int] = set()
+        for check in cast(list[dict[str, object]], checks):
+            evidence = cast(dict[str, object], check['evidence'])
+            if evidence['status'] == 'unsat' and evidence['enumeration_complete']:
+                proved.add(cast(int, evidence['length']))
+        lower = 0
+        while lower in proved:
+            lower += 1
+        lower_bounds[label] = max(lower, 4 if label == 'hierarchical' else 0)
+    result = {
+        'roles': ['CX', 'CS', 'O', 'A', 'B'], 'configured_carrier_count': 5,
+        'information_lower_bound': {'distinct_behaviors': 5, 'two_selector_bits_codes': 4,
+                                    'minimum_selector_bits': 3, 'three_selector_bits_codes': 8,
+                                    'claim': 'representation only; execution does not follow'},
+        'total_semantics': {'family': order_family(), 'target': table_properties(target),
+                            'rows': table_rows(target, 5),
+                            'all_length_impossible': True,
+                            'proof': 'A first globally noninjective primitive permanently reduces rank below 32; without one, every generator and composition is affine. The target is a nonaffine bijection.'},
+        'primitive_inventory': {'raw_calls': len(raw), 'canonical_tables': len(basis),
+                               'tables': [{'name': name, 'operation': calls[name], 'aliases': aliases[name],
+                                           'table': table, 'image_size': len(set(table)), 'affine': is_affine(table)}
+                                          for name, table in basis.items()],
+                               'every_bijective_primitive_affine': True,
+                               'every_nonaffine_primitive_globally_noninjective': True,
+                               'rank_pruned_search_tables': len(viable),
+                               'excluded': 'copy and evaluation have full image size 16 <20; memory aliases XOR'},
+        'restricted_contract': {'canonical_selector_codes': [0, 2, 4, 6, 7],
+                                'reserved_selector_codes': [1, 3, 5], 'domain': domain,
+                                'required_outputs': required, 'entry_and_exit_rows': 20,
+                                'reserved_codes_have_no_required_semantics': True},
+        'reserved_states_necessary': {'canonical_domain_preserving_primitive_names': list(canonical_only),
+                                      'invariant_verified_for_every_admitted_primitive': True,
+                                      'target_violates_invariant': True,
+                                      'all_length_proof': 'An injective twenty-row prefix confined to the twenty canonical states has image exactly that domain. Each next primitive must permute that domain. Every such primitive has control output independent of data and a shared, selector-independent linear data matrix. These properties survive composition, whereas the target selects both identity and swap matrices. Some prefix must leave the canonical domain.'},
+        'restricted_counterexample': {'operation': ['plastic', [1, 0, 2]], 'full_image_size': 24,
+                                     'restricted_outputs': [counterexample[i] for i in domain],
+                                     'restricted_image_size': 20,
+                                     'all_nonaffine_initial_restrictions': restrictions,
+                                     'meaning': 'A globally noninjective primitive is injective on this twenty-state subset; the total proof does not extend.'},
+        'independent_bfs': {'max_length': 3, 'table_cap': 250_000, 'new_at_length': counts,
+                            'complete_through_bound': True, 'target_present': False,
+                            'closure_saturated': False, 'basis_tables': len(viable)},
+        'search_records': search_records,
+        'executor': {'word': selected, 'length': len(selected), 'minimum_length': None,
+                     'proved_lower_bound': lower_bounds['hierarchical'], 'upper_bound': len(selected),
+                     'exact_shortest_count': None, 'retained_verified_words': 1,
+                     'actual_full_cube': table_properties(actual), 'prefix_trace': trace,
+                     'selectors_restored_at_exit': True, 'selectors_unchanged_at_every_prefix': False,
+                     'minimum_dedicated_workspace_bits_for_restricted_contract': 0,
+                     'five_bits_necessary_for_twenty_distinct_inputs': True,
+                     'sixth_bit_required': False},
+        'runtime_replay': {'physical_assignments': 120, 'remapping_rows': remap_rows,
+                           'selector_reuse_executions': reuse_rows, 'flat_and_transport_rows': flat_rows,
+                           'separate_processes': 'validated by PersistentOrderTests, recorded in validation_results.json'},
+        'order_pair': {'110_data_outputs': order_family()[6], '111_data_outputs': order_family()[7],
+                       'different_on_all_four_inputs': all(a != b for a,b in zip(order_family()[6],order_family()[7],strict=True))},
+        'flat_comparison': {'selector_permutation': phi, 'inverse': phi,
+                            'canonical_domain': flat_domain, 'required_outputs': [flat_target[i] for i in flat_domain],
+                            'canonical_meanings': {'000': 'I', '100': 'X', '010': 'S', '110': 'X then S', '011': 'S then X'},
+                            'word': order_flat_executor(), 'length': len(order_flat_executor()),
+                            'minimum_length': None, 'proved_lower_bound': lower_bounds['flat'], 'exact_shortest_count': None,
+                            'transported_total_target': table_properties(flat_target),
+                            'actual_full_cube': table_properties(flat_actual),
+                            'prefix_trace': trace_restricted_program(flat_domain, order_flat_executor(), (1, 5, 7)),
+                            'conjugated_main_word_length': len(conjugated),
+                            'executable_advantage_established': False,
+                            'partial_degree_note': 'A partial map has no unique full-cube ANF; the declared transported total extension has degree three.'},
+        'earned': 'Persistent state selects membership and relative order in a fixed two-generator family on the twenty canonical inputs, using representational slack without a dedicated workspace carrier.',
+        'external_contributions': {'carrier': 'OS file persistence; harness roles and initialization',
+                                   'law': 'unchanged hard-coded toggle, XOR and plastic transformations',
+                                   'representation': 'harness declares five meanings, twelve inadmissible inputs and affine flat map',
+                                   'sequencing': 'external solver discovers fixed word; Python harness retains and executes every position, with no selector-dependent branch',
+                                   'environment': 'harness sets initial data and changes only data between executions; controls process lifetimes',
+                                   'evaluator': 'experiment supplies complete desired twenty-row map, exact selector restoration and equality checks'},
+        'unearned': ['shortest executor and counts', 'encoding cost advantage', 'arbitrary operation identities',
+                    'variable length sequence representation', 'repeated instructions as stored data',
+                    'instruction pointer', 'branching and loops', 'universal interpreter',
+                    'endogenous synthesis or execution control', 'universal slack-as-workspace principle'],
+        'next_boundary': 'Determine whether representational redundancy systematically substitutes for physical workspace; do not add sequence machinery yet.'}
+    path = Path(__file__).resolve().parent / 'composition_results.json'
+    if path.exists():
+        previous = json.loads(path.read_text(encoding='utf-8'))
+        result['preserved_previous_sections_sha256'] = {
+            key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+            for key, value in previous.items() if key not in ('scope', 'persistent_order')}
+    return result
+
+
+def search_persistent_order(max_length: int = 12) -> dict[str, object]:
+    """Explicit bounded reproduction. Timeouts leave minimality unresolved."""
+    records: dict[str, object] = {}
+    for label, phi in (('hierarchical', tuple(range(8))), ('flat', order_flat_recoding())):
+        domain = tuple(sorted((phi[i >> 2] << 2) | (i & 3) for i in order_domain()))
+        target = transport_selector_cube(order_target(), phi)
+        checks = []
+        for length in range(max_length + 1):
+            words, evidence = symbolic_program_search(5, domain, tuple(target[i] for i in domain),
+                length, enumerate_all=False, timeout_ms=120_000, wall_seconds=125,
+                allowed_schemas=('toggle', 'xor', 'plastic'))
+            checks.append({'words': words, 'evidence': evidence})
+            if words:
+                break
+        records[label] = {'domain': domain, 'maximum_length': max_length, 'records': checks}
+    return persistent_order_experiment(records)
+
+
+def search_factorized_selection() -> dict[str, object]:
+    """Explicit expensive reproduction; bounded search records use the existing evidence format."""
+    records: dict[str, object] = {}
+    for prefix, family, maximum in (("main", factorized_family(), 7), ("flat", flat_family(), 6)):
+        checks = []
+        for length in range(maximum + 1):
+            words, evidence = symbolic_program_search(5, tuple(range(32)), family_table(family, True),
+                                                       length, enumerate_all=False)
+            checks.append({'words': words, 'evidence': evidence})
+            if length < maximum and evidence['status'] != 'unsat':
+                raise RuntimeError("Minimality reproduction unresolved; do not reuse a shortest claim")
+        records[prefix + '_minimum'] = checks
+        words, evidence = symbolic_program_search(5, tuple(range(32)), family_table(family, True), maximum)
+        records[prefix + '_enumeration'] = {'words': words, 'evidence': evidence}
+    basis, _ = canonical_basis(sample_basis(5, role_complete_basis(5)))
+    _, evidence = symbolic_program_search(5, tuple(range(32)), next(iter(basis.values())), 1,
+                                           alternatives=tuple(basis.values()), max_programs=256)
+    records['encoding_check'] = {'raw_count': 225, 'canonical_count': 175, 'evidence': evidence}
+    targets = tuple(family_table(selector_transport(factorized_family(), phi), True)
+                    for phi in permutations(range(4)))
+    queries = []
+    for length in range(8):
+        _, evidence = symbolic_program_search(5, tuple(range(32)), targets[0], length,
+                                               alternatives=targets)
+        queries.append(evidence)
+    records['transport_search'] = {'selector_permutations': list(permutations(range(4))), 'searches': queries}
+    cubic = ((0,1,2,3),(0,2,1,3),(2,3,0,1),(1,0,3,2))
+    checks = []
+    for length in range(9):
+        words, evidence = symbolic_program_search(5,tuple(range(32)),family_table(cubic,True),length,
+                                                   enumerate_all=False)
+        checks.append({'words': words, 'evidence': evidence})
+        if words:
+            break
+    records['cubic_flat_probe'] = checks
+    return factorized_selection_experiment(records)
+
+
 def run_experiments() -> dict[str, object]:
     b2 = sample_basis(2, two_bit_basis())
     b3_ops = three_bit_basis()
@@ -762,7 +1411,13 @@ def run_experiments() -> dict[str, object]:
     hashes = {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
               for name in ("arxmentis.py", "test_arxmentis.py",
                            "composition_experiments.py", "test_composition_experiments.py")}
+    result_path = root / "composition_results.json"
+    retained_factorized = (json.loads(result_path.read_text(encoding="utf-8")).get("factorized_selection")
+                           if result_path.exists() else None)
     return {
+        "factorized_selection": retained_factorized,
+        "persistent_order": (json.loads(result_path.read_text(encoding="utf-8")).get("persistent_order")
+                             if result_path.exists() else None),
         "mechanism_reification": mechanism_reification_experiment(c3),
         "scope": {"state_identity": "full value tuples; distinct existing valid files",
                   "excluded": ["aliasing", "file existence", "write traces", "stdout", "crashes"],
@@ -821,8 +1476,17 @@ def run_experiments() -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--selector-search", action="store_true",
+                        help="Recompute the bounded expensive two-selector searches; ordinary runs retain their certificate")
+    parser.add_argument("--order-search", action="store_true",
+                        help="Recompute bounded partial-domain order searches and runtime replay")
     args = parser.parse_args()
-    rendered = json.dumps(run_experiments(), indent=2) + "\n"
+    result = run_experiments()
+    if args.selector_search:
+        result['factorized_selection'] = search_factorized_selection()
+    if args.order_search:
+        result['persistent_order'] = search_persistent_order()
+    rendered = json.dumps(result, indent=2) + "\n"
     if args.output is None:
         print(rendered, end="")
     else:
