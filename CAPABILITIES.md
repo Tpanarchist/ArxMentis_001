@@ -245,3 +245,23 @@ Therefore this boundary cannot be solved by adding memory. Complete
 identification requires informative context coverage from the environment, an
 external experimenter, or an intervention mechanism that reaches an otherwise
 unobserved state.
+
+
+### Fixed intervention resolves passive non-identifiability
+
+A second regression replaces externally handed context coverage with a fixed
+intervention schedule.
+
+The system starts in context 0, records that transition, then uses existing
+copy plus toggle operations to force the environment into the complement of the
+sampled context. It records the second transition there. The schedule is the
+same for all four environment laws and does not branch on the hidden law or on
+the observed successor.
+
+Across all four deterministic binary laws, the sampled contexts are exactly
+`[0, 1]` and the retained model becomes exact.
+
+This establishes that **intervention/coverage is sufficient** to overcome the
+passive identifiability limit in this environment class. It does not establish
+that ArxMentis decides when intervention is needed; the harness still invokes
+the fixed schedule.
