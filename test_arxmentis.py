@@ -421,6 +421,91 @@ class PersistentStateTests(unittest.TestCase):
 
         self.assertEqual(tested_configurations, 16)
 
+    def test_adaptation_recovers_after_environment_bit_changes(self) -> None:
+        for initial_environment in (0, 1):
+            with self.subTest(initial_environment=initial_environment):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    driver = root / "driver"
+                    target = root / "target"
+                    memory = root / "memory"
+                    policy = root / "policy"
+                    write_state(initial_environment, driver)
+                    write_state(initial_environment, target)
+                    write_state(0, memory)
+                    write_state(initial_environment, policy)
+
+                    settled_before = (
+                        read_state(driver),
+                        read_state(target),
+                        read_state(memory),
+                        read_state(policy),
+                    )
+                    self.assertEqual(settled_before[:3], (initial_environment,) * 2 + (0,))
+                    self.assertEqual(
+                        adaptive_transition(driver, target, memory, policy),
+                        (
+                            initial_environment,
+                            initial_environment,
+                            0,
+                            initial_environment,
+                            initial_environment,
+                        ),
+                    )
+
+                    toggle_state(driver)
+                    after_perturbation = (
+                        read_state(driver),
+                        read_state(target),
+                        read_state(memory),
+                        read_state(policy),
+                    )
+                    self.assertEqual(after_perturbation[0], 1 - initial_environment)
+                    self.assertEqual(after_perturbation[1:], settled_before[1:])
+
+                    cycle_count = 0
+                    while cycle_count < 8:
+                        adaptive_transition(driver, target, memory, policy)
+                        cycle_count += 1
+                        after = (
+                            read_state(driver),
+                            read_state(target),
+                            read_state(memory),
+                            read_state(policy),
+                        )
+                        is_fixed_point = (
+                            after[0] == after[1]
+                            and after[2] == 0
+                            and (after[3] == 1 or after[0] == 0)
+                        )
+                        if is_fixed_point:
+                            break
+                    else:
+                        self.fail("Adaptation did not recover after environment change")
+
+                    settled_after = (
+                        read_state(driver),
+                        read_state(target),
+                        read_state(memory),
+                        read_state(policy),
+                    )
+                    self.assertEqual(settled_after[0], settled_after[1])
+                    self.assertEqual(settled_after[2], 0)
+                    self.assertEqual(
+                        cycle_count,
+                        3 if initial_environment == 0 else 1,
+                    )
+                    self.assertEqual(
+                        adaptive_transition(driver, target, memory, policy),
+                        (
+                            settled_after[1],
+                            settled_after[1],
+                            0,
+                            settled_after[3],
+                            settled_after[3],
+                        ),
+                    )
+
     def test_cli_runs_adaptive_policy_evaluate_update_cycle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"

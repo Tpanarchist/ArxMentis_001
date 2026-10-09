@@ -76,6 +76,13 @@ The test suite enumerates all 16 initial configurations `(D1, D2, M, P)` while
 holding D1 fixed. Under repeated `adapt` cycles, each reaches a fixed state
 with D1=D2 and E=0.
 
+The perturbation test starts at each stable environment state, flips only D1,
+and continues `adapt` without resetting D2, M, or P. Both directions return to
+D1=D2 and M=0: changing D1 from 0 to 1 takes three cycles and shifts P from XOR
+to copy; changing D1 from 1 to 0 takes one cycle and retains copy. No state is
+reset after the perturbation. This demonstrates recovery for this one-bit
+perturbation under the current criterion and policy rule.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final
