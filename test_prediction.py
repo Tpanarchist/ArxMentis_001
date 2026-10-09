@@ -5,6 +5,7 @@ from pathlib import Path
 
 from arxmentis import (
     contextual_adaptive_transition,
+    copy_transition,
     dependent_transition,
     evaluate_criterion,
     memory_dependent_transition,
@@ -190,6 +191,60 @@ class PredictionCapabilityTests(unittest.TestCase):
                         # prediction is already persisted.
                         write_state(law[current], context)
                         self.assertEqual(read_state(context), predicted)
+
+    def test_fixed_intervention_schedule_supplies_missing_context_coverage(
+        self,
+    ) -> None:
+        for law in product((0, 1), repeat=2):
+            with self.subTest(law=law):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    environment = root / "environment"
+                    sampled_context = root / "sampled-context"
+                    memory = root / "memory"
+                    model_zero = root / "model-zero"
+                    model_one = root / "model-one"
+
+                    write_state(0, environment)
+                    write_state(1 - law[0], model_zero)
+                    write_state(1 - law[1], model_one)
+
+                    sampled_contexts: list[int] = []
+                    for observation_index in range(2):
+                        # Retain the state whose successor is about to be
+                        # observed, then let the environment realize its law.
+                        copy_transition(
+                            environment,
+                            sampled_context,
+                            memory,
+                        )
+                        current = read_state(sampled_context)
+                        sampled_contexts.append(current)
+                        write_state(law[current], environment)
+
+                        store_observed_transition_with_existing_laws(
+                            sampled_context,
+                            environment,
+                            model_zero,
+                            model_one,
+                        )
+
+                        if observation_index == 0:
+                            # Fixed intervention: move to the complement of the
+                            # context just sampled, independent of which law is
+                            # active or what successor it produced.
+                            copy_transition(
+                                sampled_context,
+                                environment,
+                                memory,
+                            )
+                            toggle_state(environment)
+
+                    self.assertEqual(sampled_contexts, [0, 1])
+                    self.assertEqual(
+                        (read_state(model_zero), read_state(model_one)),
+                        law,
+                    )
 
     def test_current_contextual_update_fails_direct_acquisition_for_one_entry(
         self,
