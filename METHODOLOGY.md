@@ -194,48 +194,48 @@ Therefore the current boundary is now sharper:
 - fixed intervention is sufficient to supply missing information;
 - choosing **when and why** to intervene is not yet internal.
 
+## Coverage-sensitive intervention result
+
+The first uncertainty-sensitive probe uses the otherwise-free M role as a
+one-bit distinction between "still underdetermined" and "resolved" in a
+two-candidate environment.
+
+After observing `0 -> 0`, constant-0 and identity remain consistent. Repeating
+the same context has zero discriminatory value. A fixed decision program uses
+the retained underdetermination state to intervene into context 1 before the
+next successor is observed. That observation reduces the candidate set from
+two laws to one. Once the retained state is marked resolved, the same decision
+program no longer intervenes.
+
+This earns a narrow form of state-dependent information-seeking action. It does
+not earn general information-gain reasoning because the useful intervention is
+prewired for this experiment.
+
 ## Immediate research frontier
 
-The next capability should be **uncertainty-sensitive intervention**.
+Two pieces of external causal structure are now exposed clearly.
 
-Operationally:
+### 1. General epistemic choice
 
-> given partial observations that leave more than one environment law
-> consistent with history, can ArxMentis retain that underdetermination and
-> choose an intervention that distinguishes the remaining possibilities?
+Can ArxMentis choose among multiple available interventions when which action
+is informative depends on the current candidate-model set, rather than on a
+hard-coded one-bit coverage flag?
 
-This must be separated into two subclaims.
+A valid experiment should require at least two different uncertainty states for
+which different interventions are optimal. The system must select before the
+revealing observation and the evaluator must score ambiguity reduction, not
+task-state reward.
 
-### 1. Uncertainty representation
+### 2. Endogenous sequencing
 
-The system must distinguish at least:
+The harness still invokes operation programs in the correct order: observe,
+store, decide, intervene, predict, evaluate.
 
-```text
-model determined
-model still underdetermined
-```
+Eventually that ordering must itself become part of ArxMentis if the substrate
+is to operate without an external experimenter selecting each law invocation.
 
-and preferably which candidate laws remain possible. Do not assume a new bit
-is required; first search whether existing retained state can encode the
-candidate set without destroying the learned model.
-
-### 2. Informative action selection
-
-An intervention counts as information-seeking only if its selection depends on
-the retained uncertainty and if different interventions have different
-expected discriminatory value.
-
-A fixed intervention schedule, including the one already demonstrated, does
-not satisfy this claim.
-
-The next experiment should therefore construct the smallest environment where:
-
-- passive history leaves two candidate laws;
-- one available action distinguishes them;
-- another available action does not;
-- the action choice occurs before the revealing observation;
-- success is measured by reduction of model ambiguity, not by the environment
-  state itself.
-
-If existing state/laws cannot satisfy that specification, only then add the
-minimum missing structure.
+These questions should remain separate. First determine whether general
+epistemic action selection requires new representational state or only a richer
+composition of existing laws. Then test whether the resulting program can be
+driven by one repeated endogenous transition instead of an externally selected
+sequence.
