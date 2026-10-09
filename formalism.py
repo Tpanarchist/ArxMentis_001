@@ -76,6 +76,7 @@ def can_represent_all_binary_context_mappings(
             (0, 1),
             repeat=memory_state_count * context_count,
         ):
+
             def decode(state: int, context: int) -> int:
                 return decoder_flat[state * context_count + context]
 
@@ -99,5 +100,44 @@ def minimum_states_for_all_binary_context_mappings(
             state_count,
             context_count=context_count,
         ):
+            return state_count
+    raise AssertionError("search bound should contain a solution")
+
+
+def can_predict_fixed_binary_change_laws(model_state_count: int) -> bool:
+    """Whether model states can exactly represent both STAY and FLIP laws.
+
+    The environment law is one fixed bit L:
+      L=0: next = current
+      L=1: next = 1-current
+
+    After learning L, the predictor receives the current environment bit and
+    its persistent model state. We exhaustively search encoders from laws to
+    model states and decoders from (model state, current bit) to next-bit
+    predictions.
+    """
+    if model_state_count < 1:
+        raise ValueError("model_state_count must be positive")
+
+    laws = (0, 1)
+    for encoder in product(range(model_state_count), repeat=len(laws)):
+        for decoder_flat in product((0, 1), repeat=model_state_count * 2):
+
+            def predict(state: int, current: int) -> int:
+                return decoder_flat[state * 2 + current]
+
+            if all(
+                predict(encoder[law], current) == (current ^ law)
+                for law in laws
+                for current in (0, 1)
+            ):
+                return True
+    return False
+
+
+def minimum_states_for_fixed_binary_change_prediction() -> int:
+    """Smallest learned model state space that can represent STAY and FLIP."""
+    for state_count in range(1, 3):
+        if can_predict_fixed_binary_change_laws(state_count):
             return state_count
     raise AssertionError("search bound should contain a solution")
