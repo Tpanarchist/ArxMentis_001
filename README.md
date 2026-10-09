@@ -161,3 +161,20 @@ Run the tests with:
 ```powershell
 python -m unittest
 ```
+
+## Composition research account
+
+The progression above is retained as experimental chronology. The substrate
+inventory, full-state composition results, functional-role accounting, bounded
+program search, and provisional capability dependency DAG are documented in
+[FOUNDATIONS.md](FOUNDATIONS.md). These experiments preserve the runtime and
+historical tests. They distinguish externally searched programs from endogenous
+problem solving, and the hard-coded `predict-next` control from learned prediction.
+
+Reproduce the finite evidence with the explicit local interpreter:
+
+```powershell
+.\.venv\Scripts\python.exe composition_experiments.py --output composition_results.json
+.\.venv\Scripts\python.exe -m unittest test_composition_experiments
+.\.venv\Scripts\python.exe -m unittest
+```

@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-09",
+  "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
+  "python_version": "3.14.6",
+  "baseline_tests": 60,
+  "historical_tests": 40,
+  "focused": {
+    "module": "test_composition_experiments.MechanismReificationTests",
+    "tests": 12,
+    "passed": true,
+    "seconds": 24.267
+  },
+  "experimental": {
+    "module": "test_composition_experiments",
+    "tests": 32,
+    "passed": true,
+    "seconds": 52.172
+  },
+  "full": {
+    "command": ".venv/Scripts/python.exe -B -m unittest",
+    "tests": 72,
+    "passed": true,
+    "seconds": 53.179
+  },
+  "historical_runtime_and_test_sha256_unchanged": true,
+  "source_sha256": {
+    "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
+    "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
+    "composition_experiments.py": "4b35f11662cbe870bff244285e4ce85739a3e739f18d716de9f21f85e57f671c",
+    "test_composition_experiments.py": "ec17f940ee4cd4c9850fbc86502c815c212a0a3666d12d537d0da5d2d87ef576"
+  },
+  "pylance": {
+    "version": "2026.4.1",
+    "host": "installed Microsoft Visual Studio Code",
+    "type_checking_mode": "basic",
+    "interpreter": "E:/ArxMentis/.venv/Scripts/python.exe",
+    "readiness_hover_counts": [
+      1,
+      1
+    ],
+    "diagnostics": {
+      "e:\\ArxMentis\\composition_experiments.py": [],
+      "e:\\ArxMentis\\test_composition_experiments.py": []
+    },
+    "excluded_non_python_provider": "cSpell informational spelling diagnostics"
+  },
+  "git_diff_check": true,
+  "new_artifact_trailing_whitespace_check": true,
+  "bytecode_policy": "Explicit -B used for all follow-up interpreter and child-process runs; tracked caches unchanged",
+  "mechanism_reification": {
+    "total_three_bit_impossibility_proven": true,
+    "minimum_workspace_bits": 1,
+    "minimum_fixed_executor_length": 6,
+    "canonical_four_bit_basis_tables": 76,
+    "admissible_domain": "all C,A,B; W=0, W restored to 0",
+    "search_max_prefix": 3,
+    "search_max_suffix": 3,
+    "maximum_complete_program_length": 6,
+    "per_direction_table_cap": 500000,
+    "cap_reached": false
+  },
+  "previous_research_pass": {
+    "date": "2026-10-09",
+    "python": "E:/ArxMentis/.venv/Scripts/python.exe",
+    "python_version": "3.14.6",
+    "baseline_tests": 40,
+    "focused": {
+      "module": "test_composition_experiments",
+      "tests": 20,
+      "passed": true,
+      "seconds": 30.137
+    },
+    "full": {
+      "command": ".venv/Scripts/python.exe -m unittest",
+      "tests": 60,
+      "passed": true,
+      "seconds": 33.61
+    },
+    "historical_runtime_and_test_sha256_unchanged": true,
+    "source_sha256": {
+      "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
+      "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
+      "composition_experiments.py": "4d448732f562f08dc3f4cb5be933d54d786cc98050e685fc77188b65eca126ef",
+      "test_composition_experiments.py": "2eba5d206a3f476254db15d8cc119086191ce33b9ac76ffb2cac34637db81c90"
+    },
+    "pylance": {
+      "version": "2026.4.1",
+      "host": "installed Microsoft Visual Studio Code",
+      "type_checking_mode": "basic",
+      "interpreter": "E:/ArxMentis/.venv/Scripts/python.exe",
+      "readiness_hover_counts": [
+        1,
+        1
+      ],
+      "diagnostics": {
+        "e:\\ArxMentis\\composition_experiments.py": [],
+        "e:\\ArxMentis\\test_composition_experiments.py": []
+      },
+      "excluded_non_python_provider": "cSpell informational spelling diagnostics"
+    },
+    "git_diff_check": true,
+    "new_artifact_trailing_whitespace_check": true,
+    "bytecode_cleanup": "Only test-generated cache changes reverted; historical tracked caches preserved"
+  }
+}
