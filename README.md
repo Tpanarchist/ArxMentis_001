@@ -91,6 +91,12 @@ environment change. This is an operational test of improved performance after
 experience for this perturbation sequence; it does not add a new transition
 rule or state bit.
 
+A policy-isolation test first acquires P=`1` by solving the same `0 -> 1`
+perturbation, then preserves only P and resets D1, D2, and M to `(0, 0, 0)`.
+Against a naive XOR-policy control with identical task state, the experienced
+COPY policy recovers in one cycle instead of three. This isolates the
+performance advantage to persistent policy state for this task.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

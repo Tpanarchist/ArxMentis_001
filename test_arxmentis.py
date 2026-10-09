@@ -571,6 +571,102 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual(recovery_cycles, [3, 1, 1, 1, 1, 1, 1, 1])
             self.assertEqual(read_state(policy), 1)
 
+    def test_learned_policy_improves_recovery_after_task_state_reset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            training = root / "training"
+            training.mkdir()
+            driver = training / "driver"
+            target = training / "target"
+            memory = training / "memory"
+            policy = training / "policy"
+            write_state(0, driver)
+            write_state(0, target)
+            write_state(0, memory)
+            write_state(0, policy)
+
+            toggle_state(driver)
+            for training_cycles in range(1, 9):
+                adaptive_transition(driver, target, memory, policy)
+                trained_state = (
+                    read_state(driver),
+                    read_state(target),
+                    read_state(memory),
+                    read_state(policy),
+                )
+                if (
+                    trained_state[0] == trained_state[1]
+                    and trained_state[2] == 0
+                    and (trained_state[3] == 1 or trained_state[0] == 0)
+                ):
+                    break
+            else:
+                self.fail("Training did not reach a satisfying fixed point")
+
+            self.assertEqual(training_cycles, 3)
+            learned_policy = read_state(policy)
+            self.assertEqual(learned_policy, 1)
+
+            task_state = (0, 0, 0)
+            recovery_times: dict[int, int] = {}
+            for policy_value in (0, learned_policy):
+                trial = root / f"trial-{policy_value}"
+                trial.mkdir()
+                trial_driver = trial / "driver"
+                trial_target = trial / "target"
+                trial_memory = trial / "memory"
+                trial_policy = trial / "policy"
+                write_state(task_state[0], trial_driver)
+                write_state(task_state[1], trial_target)
+                write_state(task_state[2], trial_memory)
+                write_state(policy_value, trial_policy)
+
+                self.assertEqual(
+                    (
+                        read_state(trial_driver),
+                        read_state(trial_target),
+                        read_state(trial_memory),
+                    ),
+                    task_state,
+                )
+                toggle_state(trial_driver)
+                self.assertEqual(
+                    (
+                        read_state(trial_driver),
+                        read_state(trial_target),
+                        read_state(trial_memory),
+                    ),
+                    (1, 0, 0),
+                )
+
+                for recovery_cycles in range(1, 9):
+                    adaptive_transition(
+                        trial_driver,
+                        trial_target,
+                        trial_memory,
+                        trial_policy,
+                    )
+                    recovered = (
+                        read_state(trial_driver),
+                        read_state(trial_target),
+                        read_state(trial_memory),
+                        read_state(trial_policy),
+                    )
+                    if (
+                        recovered[0] == recovered[1]
+                        and recovered[2] == 0
+                        and (recovered[3] == 1 or recovered[0] == 0)
+                    ):
+                        break
+                else:
+                    self.fail(
+                        f"Policy {policy_value} did not recover after task reset"
+                    )
+
+                recovery_times[policy_value] = recovery_cycles
+
+            self.assertEqual(recovery_times, {0: 3, learned_policy: 1})
+
     def test_cli_runs_adaptive_policy_evaluate_update_cycle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"
