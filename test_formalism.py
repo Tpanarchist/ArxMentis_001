@@ -2,10 +2,12 @@ import unittest
 
 from formalism import (
     bits_required,
+    can_predict_fixed_binary_change_laws,
     can_represent_all_binary_context_mappings,
     can_retain_binary_past,
     minimum_states_for_all_binary_context_mappings,
     minimum_states_for_binary_past,
+    minimum_states_for_fixed_binary_change_prediction,
 )
 
 
@@ -34,6 +36,17 @@ class FormalMinimalityTests(unittest.TestCase):
             4,
         )
         self.assertEqual(bits_required(4), 2)
+
+    def test_one_model_state_cannot_predict_both_stay_and_flip_laws(self) -> None:
+        self.assertFalse(can_predict_fixed_binary_change_laws(1))
+
+    def test_two_model_states_are_minimal_for_stay_and_flip_prediction(self) -> None:
+        self.assertTrue(can_predict_fixed_binary_change_laws(2))
+        self.assertEqual(
+            minimum_states_for_fixed_binary_change_prediction(),
+            2,
+        )
+        self.assertEqual(bits_required(2), 1)
 
 
 if __name__ == "__main__":
