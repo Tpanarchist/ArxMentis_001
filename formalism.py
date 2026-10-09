@@ -175,3 +175,42 @@ def minimum_states_for_all_binary_deterministic_prediction() -> int:
         if can_predict_all_binary_deterministic_laws(state_count):
             return state_count
     raise AssertionError("search bound should contain a solution")
+
+
+def binary_law_trajectory_signature(
+    law: tuple[int, int],
+    initial_state: int,
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
+    """Return the transient prefix and eventual cycle of a binary deterministic law."""
+    if law not in all_binary_deterministic_laws():
+        raise ValueError("law must map binary current states to binary next states")
+    if initial_state not in (0, 1):
+        raise ValueError("initial_state must be 0 or 1")
+
+    seen_at: dict[int, int] = {}
+    sequence: list[int] = []
+    current = initial_state
+
+    while current not in seen_at:
+        seen_at[current] = len(sequence)
+        sequence.append(current)
+        current = law[current]
+
+    cycle_start = seen_at[current]
+    return tuple(sequence[:cycle_start]), tuple(sequence[cycle_start:])
+
+
+def passive_binary_law_classes(
+    initial_state: int,
+) -> tuple[tuple[tuple[int, int], ...], ...]:
+    """Group laws that generate the same complete passive trajectory."""
+    groups: dict[
+        tuple[tuple[int, ...], tuple[int, ...]],
+        list[tuple[int, int]],
+    ] = {}
+
+    for law in all_binary_deterministic_laws():
+        signature = binary_law_trajectory_signature(law, initial_state)
+        groups.setdefault(signature, []).append(law)
+
+    return tuple(tuple(group) for group in groups.values())
