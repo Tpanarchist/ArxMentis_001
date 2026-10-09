@@ -13,6 +13,7 @@ python arxmentis.py read --distinction 2
 python arxmentis.py step --distinction 2
 python arxmentis.py copy --distinction 2
 python arxmentis.py read-memory
+python arxmentis.py memory-step --distinction 2
 ```
 
 The last read for each distinction recovers the value saved by the previous
@@ -41,6 +42,12 @@ The retained bit distinguishes converging histories: copying from `(0, 0)`
 leaves the present pair `(0, 0)` and M=`0`; copying from `(0, 1)` also leaves
 the present pair `(0, 0)`, but M=`1`. This retains the overwritten value, not
 a general transition log.
+
+`memory-step --distinction 2` makes M affect the next state by persisting
+`D2' = D2 XOR M` while leaving D1 and M unchanged. With the present pair fixed
+at `(0, 0)`, M=`0` leaves D2 at `0`, while M=`1` changes D2 to `1`. Thus the
+retained past can affect a later transition even when the present pair is
+identical.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces

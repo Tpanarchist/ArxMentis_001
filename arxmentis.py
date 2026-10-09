@@ -57,12 +57,24 @@ def copy_transition(
     return previous, driver
 
 
+def memory_dependent_transition(
+    target_path: Path,
+    memory_path: Path = MEMORY_STATE_FILE,
+) -> tuple[int, int]:
+    memory = read_state(memory_path)
+    previous = read_state(target_path)
+    current = previous ^ memory
+    write_state(current, target_path)
+    return previous, current
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Read or change ArxMentis' persistent distinctions."
     )
     parser.add_argument(
-        "action", choices=("read", "read-memory", "toggle", "step", "copy")
+        "action",
+        choices=("read", "read-memory", "toggle", "step", "copy", "memory-step"),
     )
     parser.add_argument("--distinction", type=int, choices=(1, 2), default=1)
     parser.add_argument("--state-file", type=Path)
@@ -81,6 +93,12 @@ def main() -> None:
         driver_distinction = 3 - args.distinction
         driver_path = DISTINCTION_STATE_FILES[driver_distinction]
         previous, current = dependent_transition(driver_path, target_path)
+        print(f"D{args.distinction}: {previous} -> {current}")
+    elif args.action == "memory-step":
+        previous, current = memory_dependent_transition(
+            target_path,
+            args.memory_file or MEMORY_STATE_FILE,
+        )
         print(f"D{args.distinction}: {previous} -> {current}")
     else:
         driver_distinction = 3 - args.distinction

@@ -11,6 +11,7 @@ from arxmentis import (
     copy_transition,
     dependent_transition,
     main,
+    memory_dependent_transition,
     read_state,
     toggle_state,
     write_state,
@@ -238,6 +239,58 @@ class PersistentStateTests(unittest.TestCase):
                 main()
 
             self.assertEqual(output.getvalue().strip(), "1")
+
+    def test_memory_changes_future_with_present_held_fixed(self) -> None:
+        next_target_values: list[int] = []
+
+        for memory_value in (0, 1):
+            with tempfile.TemporaryDirectory() as directory:
+                first = Path(directory) / "distinction-1"
+                second = Path(directory) / "distinction-2"
+                memory = Path(directory) / "memory"
+                write_state(0, first)
+                write_state(0, second)
+                write_state(memory_value, memory)
+
+                _, next_target = memory_dependent_transition(second, memory)
+                next_target_values.append(next_target)
+                self.assertEqual(
+                    (read_state(first), read_state(second)),
+                    (0, next_target),
+                )
+
+        self.assertEqual(next_target_values, [0, 1])
+
+    def test_cli_applies_memory_dependent_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            write_state(0, first)
+            write_state(0, second)
+            write_state(1, memory)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "memory-step",
+                        "--distinction",
+                        "2",
+                        "--memory-file",
+                        str(memory),
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(output.getvalue().strip(), "D2: 0 -> 1")
+            self.assertEqual((read_state(first), read_state(second)), (0, 1))
+            self.assertEqual(read_state(memory), 1)
 
     def test_transition_order_changes_the_final_state(self) -> None:
         final_states: list[tuple[int, int]] = []
