@@ -83,6 +83,14 @@ to copy; changing D1 from 1 to 0 takes one cycle and retains copy. No state is
 reset after the perturbation. This demonstrates recovery for this one-bit
 perturbation under the current criterion and policy rule.
 
+An alternating perturbation test runs `0 -> 1 -> 0 -> 1 -> 0 -> 1 -> 0 -> 1`
+without resetting D2, M, or P. It records recovery times of
+`3, 1, 1, 1, 1, 1, 1, 1` cycles: after the first exposure changes P from XOR
+to copy, the persistent policy supports one-cycle recovery for each subsequent
+environment change. This is an operational test of improved performance after
+experience for this perturbation sequence; it does not add a new transition
+rule or state bit.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

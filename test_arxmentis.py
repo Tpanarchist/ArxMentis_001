@@ -506,6 +506,71 @@ class PersistentStateTests(unittest.TestCase):
                         ),
                     )
 
+    def test_adaptation_learns_from_alternating_environment_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "driver"
+            target = root / "target"
+            memory = root / "memory"
+            policy = root / "policy"
+            write_state(0, driver)
+            write_state(0, target)
+            write_state(0, memory)
+            write_state(0, policy)
+
+            recovery_cycles: list[int] = []
+            for perturbation_index in range(8):
+                state_before_perturbation = (
+                    read_state(driver),
+                    read_state(target),
+                    read_state(memory),
+                    read_state(policy),
+                )
+                self.assertEqual(state_before_perturbation[0], perturbation_index % 2)
+                self.assertEqual(state_before_perturbation[0], state_before_perturbation[1])
+                self.assertEqual(state_before_perturbation[2], 0)
+
+                toggle_state(driver)
+                after_perturbation = (
+                    read_state(driver),
+                    read_state(target),
+                    read_state(memory),
+                    read_state(policy),
+                )
+                self.assertEqual(after_perturbation[0], 1 - state_before_perturbation[0])
+                self.assertEqual(after_perturbation[1:], state_before_perturbation[1:])
+
+                cycle_count = 0
+                while cycle_count < 8:
+                    adaptive_transition(driver, target, memory, policy)
+                    cycle_count += 1
+                    recovered = (
+                        read_state(driver),
+                        read_state(target),
+                        read_state(memory),
+                        read_state(policy),
+                    )
+                    is_fixed_point = (
+                        recovered[0] == recovered[1]
+                        and recovered[2] == 0
+                        and (recovered[3] == 1 or recovered[0] == 0)
+                    )
+                    if is_fixed_point:
+                        break
+                else:
+                    self.fail(
+                        "Adaptation did not recover after alternating "
+                        "environment changes"
+                    )
+
+                recovery_cycles.append(cycle_count)
+                self.assertEqual(recovered[0], recovered[1])
+                self.assertEqual(recovered[2], 0)
+                self.assertEqual(recovered[3], 1)
+
+            self.assertEqual(recovery_cycles, [3, 1, 1, 1, 1, 1, 1, 1])
+            self.assertEqual(read_state(policy), 1)
+
     def test_cli_runs_adaptive_policy_evaluate_update_cycle(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "distinction-1"
