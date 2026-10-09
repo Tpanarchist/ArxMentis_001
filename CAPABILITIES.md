@@ -265,3 +265,31 @@ This establishes that **intervention/coverage is sufficient** to overcome the
 passive identifiability limit in this environment class. It does not establish
 that ArxMentis decides when intervention is needed; the harness still invokes
 the fixed schedule.
+
+
+### Coverage-sensitive information-seeking intervention
+
+A narrow active-learning probe now uses the otherwise-free memory slot as a
+one-bit underdetermination/coverage state.
+
+The environment is restricted to the two laws that remain indistinguishable
+after observing `0 -> 0`: constant-0 and identity.
+
+After that passive observation:
+
+- two candidate laws remain consistent;
+- repeating the same context leaves both candidates consistent;
+- the retained uncertainty/coverage bit causes a fixed decision program to
+  intervene into context 1 before the revealing successor is observed;
+- the context-1 observation reduces the externally evaluated candidate set
+  from two laws to one;
+- the learned P0/P1 table then equals the hidden law;
+- after the uncertainty/coverage bit is marked complete, running the same
+  decision program no longer intervenes.
+
+The action choice therefore depends on retained epistemic state and is made
+before the revealing observation.
+
+This is not general expected-information-gain reasoning. The mapping from the
+one-bit uncertainty state to the useful intervention is built into the fixed
+program, and the harness still sequences observation, storage, and evaluation.
