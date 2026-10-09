@@ -188,3 +188,60 @@ Before adding a new primitive:
 The research target is not the fewest persistent bits in isolation. It is the
 smallest causal architecture that satisfies a capability specification without
 hiding the solution in laws, environment control, or evaluation.
+
+
+## Post-pivot findings
+
+### Derived gated write
+
+Existing XOR and plastic transitions compose into a conditional store.
+
+Apply XOR from driver d into target t, then apply plastic transition with
+selector s. Exhaustive testing over all eight input triples gives:
+
+```text
+s=0 -> t remains its previous value
+s=1 -> t becomes d
+```
+
+No new primitive is introduced. This derived gated write is enough to address
+one of two retained slots when combined with a temporary context complement.
+
+### Complete deterministic binary model class
+
+A binary deterministic one-step environment has four possible transition laws:
+`00`, `01`, `10`, and `11`, where the two bits are the successors of
+current states 0 and 1.
+
+Exhaustive encoder/decoder search establishes a capacity lower bound of four
+learned model states, equivalent to two binary distinctions. Existing P0 and
+P1 already supply exactly that capacity.
+
+A fixed composition of existing toggle, XOR, and plastic transitions can store
+an observed successor into the context-selected model bit. Another fixed
+composition can load the selected model entry into D2 before the environment
+moves. Starting both model entries wrong, the regression learns and predicts
+all four laws after receiving one observation from each current-state context.
+
+This establishes exact tabular model acquisition and next-state prediction for
+the full deterministic binary one-step law class without adding persistent
+state or a primitive transition.
+
+The harness still supplies observation timing, one sample from each context,
+and execution of the fixed composition.
+
+### Passive identifiability limit
+
+Complete four-law identification cannot be guaranteed from every single passive
+trajectory, regardless of memory size.
+
+Starting from 0, constant-0 and identity both generate `0,0,0,...` forever.
+Starting from 1, identity and constant-1 both generate `1,1,1,...` forever.
+
+The formalism now computes transient/cycle trajectory signatures and groups
+laws that are observationally equivalent from a given initial state.
+
+Therefore this boundary cannot be solved by adding memory. Complete
+identification requires informative context coverage from the environment, an
+external experimenter, or an intervention mechanism that reaches an otherwise
+unobserved state.
