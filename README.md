@@ -104,6 +104,15 @@ when D1=`0`, while XOR succeeds when D1=`1`. This establishes that the
 environment contains a context-dependent choice; it does not change the
 existing equality criterion in `adapt` or add policy state.
 
+`adapt-context` tests retained context-to-action associations. The existing
+`.arxmentis-policy` is P0, and the additional `.arxmentis-policy-1` stores P1;
+each uses `0` for XOR and `1` for COPY. D1 selects which policy acts and learns,
+with D2=`0` as the success criterion for this command. The two-bit policy can
+represent all four mappings from the two contexts to the two actions; one
+global policy bit can represent only two. The interference regression trains
+P0 to COPY and P1 to XOR in turn, then returns to each context and confirms its
+learned action is still selected after training the other.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

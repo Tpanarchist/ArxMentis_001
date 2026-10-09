@@ -10,6 +10,7 @@ from unittest.mock import patch
 from arxmentis import (
     adaptive_transition,
     copy_transition,
+    contextual_adaptive_transition,
     dependent_transition,
     evaluate_criterion,
     main,
@@ -183,6 +184,71 @@ class PersistentStateTests(unittest.TestCase):
                         successful_actions[context].add(action_name)
 
         self.assertEqual(successful_actions, {0: {"copy"}, 1: {"xor"}})
+
+    def test_contextual_policy_learning_does_not_interfere(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "driver"
+            target = root / "target"
+            memory = root / "memory"
+            policy_zero = root / "policy-zero"
+            policy_one = root / "policy-one"
+            write_state(0, driver)
+            write_state(1, target)
+            write_state(0, memory)
+            write_state(0, policy_zero)
+            write_state(1, policy_one)
+
+            contextual_adaptive_transition(
+                driver, target, memory, policy_zero, policy_one
+            )
+            self.assertEqual((read_state(target), read_state(memory)), (1, 1))
+            self.assertEqual(
+                (read_state(policy_zero), read_state(policy_one)),
+                (1, 1),
+            )
+            contextual_adaptive_transition(
+                driver, target, memory, policy_zero, policy_one
+            )
+            self.assertEqual((read_state(target), read_state(memory)), (0, 0))
+            self.assertEqual(
+                (read_state(policy_zero), read_state(policy_one)),
+                (1, 1),
+            )
+
+            write_state(1, driver)
+            write_state(1, target)
+            contextual_adaptive_transition(
+                driver, target, memory, policy_zero, policy_one
+            )
+            self.assertEqual((read_state(target), read_state(memory)), (1, 1))
+            self.assertEqual(
+                (read_state(policy_zero), read_state(policy_one)),
+                (1, 0),
+            )
+            contextual_adaptive_transition(
+                driver, target, memory, policy_zero, policy_one
+            )
+            self.assertEqual((read_state(target), read_state(memory)), (0, 0))
+            self.assertEqual(
+                (read_state(policy_zero), read_state(policy_one)),
+                (1, 0),
+            )
+
+            for context, expected_policy in ((0, 1), (1, 0)):
+                write_state(context, driver)
+                write_state(1, target)
+                previous, current, error, policy, updated_policy = (
+                    contextual_adaptive_transition(
+                        driver, target, memory, policy_zero, policy_one
+                    )
+                )
+                self.assertEqual((previous, current, error), (1, 0, 0))
+                self.assertEqual((policy, updated_policy), (expected_policy,) * 2)
+                self.assertEqual(
+                    (read_state(policy_zero), read_state(policy_one)),
+                    (1, 0),
+                )
 
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))
@@ -729,6 +795,47 @@ class PersistentStateTests(unittest.TestCase):
             self.assertEqual((read_state(first), read_state(second)), (1, 1))
             self.assertEqual(read_state(memory), 0)
             self.assertEqual(read_state(policy), 0)
+
+    def test_cli_runs_context_selected_adaptation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            first = Path(directory) / "distinction-1"
+            second = Path(directory) / "distinction-2"
+            memory = Path(directory) / "memory"
+            policy_zero = Path(directory) / "policy-zero"
+            policy_one = Path(directory) / "policy-one"
+            write_state(1, first)
+            write_state(1, second)
+            write_state(0, memory)
+            write_state(1, policy_zero)
+            write_state(0, policy_one)
+            output = io.StringIO()
+
+            with (
+                patch("arxmentis.DISTINCTION_STATE_FILES", {1: first, 2: second}),
+                patch(
+                    "sys.argv",
+                    [
+                        "arxmentis.py",
+                        "adapt-context",
+                        "--memory-file",
+                        str(memory),
+                        "--policy-file",
+                        str(policy_zero),
+                        "--policy-1-file",
+                        str(policy_one),
+                    ],
+                ),
+                redirect_stdout(output),
+            ):
+                main()
+
+            self.assertEqual(
+                output.getvalue().strip(),
+                "D2: 1 -> 0; criterion satisfied; P1=0 -> 0",
+            )
+            self.assertEqual((read_state(first), read_state(second)), (1, 0))
+            self.assertEqual((read_state(memory), read_state(policy_zero)), (0, 1))
+            self.assertEqual(read_state(policy_one), 0)
 
     def test_cli_runs_memory_selected_transition(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

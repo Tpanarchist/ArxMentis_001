@@ -7,6 +7,7 @@ STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state"
 SECOND_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-state-2"
 MEMORY_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-memory"
 POLICY_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-policy"
+SECOND_POLICY_STATE_FILE = Path(__file__).resolve().parent / ".arxmentis-policy-1"
 DISTINCTION_STATE_FILES = {
     1: STATE_FILE,
     2: SECOND_STATE_FILE,
@@ -110,6 +111,27 @@ def adaptive_transition(
     return previous, current, error, policy, updated_policy
 
 
+def contextual_adaptive_transition(
+    driver_path: Path,
+    target_path: Path,
+    memory_path: Path = MEMORY_STATE_FILE,
+    policy_zero_path: Path = POLICY_STATE_FILE,
+    policy_one_path: Path = SECOND_POLICY_STATE_FILE,
+) -> tuple[int, int, int, int, int]:
+    context = read_state(driver_path)
+    policy_path = policy_zero_path if context == 0 else policy_one_path
+    policy = read_state(policy_path)
+    previous = read_state(target_path)
+    current = context ^ previous if policy == 0 else context
+    write_state(current, target_path)
+
+    error = current
+    write_state(error, memory_path)
+    updated_policy = policy if error == 0 else 1 - policy
+    write_state(updated_policy, policy_path)
+    return previous, current, error, policy, updated_policy
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Read or change ArxMentis' persistent distinctions."
@@ -128,15 +150,22 @@ def main() -> None:
             "read-policy",
             "toggle-policy",
             "adapt",
+            "adapt-context",
         ),
     )
     parser.add_argument("--distinction", type=int, choices=(1, 2), default=1)
     parser.add_argument("--state-file", type=Path)
     parser.add_argument("--memory-file", type=Path)
     parser.add_argument("--policy-file", type=Path)
+    parser.add_argument("--policy-1-file", type=Path)
+    parser.add_argument("--context", type=int, choices=(0, 1), default=0)
     args = parser.parse_args()
     target_path = args.state_file or DISTINCTION_STATE_FILES[args.distinction]
-    policy_path = args.policy_file or POLICY_STATE_FILE
+    policy_paths = {
+        0: args.policy_file or POLICY_STATE_FILE,
+        1: args.policy_1_file or SECOND_POLICY_STATE_FILE,
+    }
+    policy_path = policy_paths[args.context]
 
     if args.action == "read":
         print(read_state(target_path))
@@ -191,6 +220,24 @@ def main() -> None:
         print(
             f"D{args.distinction}: {previous} -> {current}; "
             f"criterion {result}; P={policy} -> {updated_policy}"
+        )
+    elif args.action == "adapt-context":
+        driver_path = DISTINCTION_STATE_FILES[1]
+        target_path = DISTINCTION_STATE_FILES[2]
+        context = read_state(driver_path)
+        previous, current, error, policy, updated_policy = (
+            contextual_adaptive_transition(
+                driver_path,
+                target_path,
+                args.memory_file or MEMORY_STATE_FILE,
+                policy_paths[0],
+                policy_paths[1],
+            )
+        )
+        result = "satisfied" if error == 0 else "not satisfied"
+        print(
+            f"D2: {previous} -> {current}; criterion {result}; "
+            f"P{context}={policy} -> {updated_policy}"
         )
     else:
         driver_distinction = 3 - args.distinction
