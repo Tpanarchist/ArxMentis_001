@@ -113,13 +113,14 @@ global policy bit can represent only two. The interference regression trains
 P0 to COPY and P1 to XOR in turn, then returns to each context and confirms its
 learned action is still selected after training the other.
 
-The anticipation probe starts from `(D1, D2)=(0, 0)` and allows the context-0
-policy to act before flipping D1. Neither available action can prepare D2=`1`:
-COPY writes D1=`0`, and XOR computes `0 XOR 0 = 0`. After the environmental
-flip to D1=`1`, equality is therefore violated. This shows the existing
-context-selected COPY/XOR actions cannot produce the proposed anticipatory
-preparation from that initial state; the regular environment pattern alone
-does not make the state transition predictive.
+The anticipation probe starts from `(D1, D2)=(0, 0)`, toggles D2 before each
+environment flip, then evaluates equality only after D1 flips. Across eight
+alternating transitions, each preparation temporarily makes D1 and D2 differ,
+but the environmental change restores equality before evaluation (`E=0`).
+This demonstrates that the existing `toggle_state` operation can mechanically
+produce anticipatory regulation under a perfectly alternating environment. It
+does not show that ArxMentis predicts the environment or learns when to toggle:
+the action and environmental schedule are externally imposed.
 
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces

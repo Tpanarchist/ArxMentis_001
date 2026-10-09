@@ -289,6 +289,38 @@ class PersistentStateTests(unittest.TestCase):
                         (1, 0),
                     )
 
+    def test_toggle_before_alternating_environment_change_preserves_equality(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "driver"
+            target = root / "target"
+            memory = root / "memory"
+            write_state(0, driver)
+            write_state(0, target)
+            write_state(0, memory)
+
+            for expected_context in (1, 0) * 4:
+                self.assertEqual(
+                    (read_state(driver), read_state(target)),
+                    (1 - expected_context, 1 - expected_context),
+                )
+
+                toggle_state(target)
+                self.assertEqual(
+                    (read_state(driver), read_state(target)),
+                    (1 - expected_context, expected_context),
+                )
+
+                toggle_state(driver)
+                self.assertEqual(
+                    (read_state(driver), read_state(target)),
+                    (expected_context, expected_context),
+                )
+                self.assertEqual(
+                    evaluate_criterion(driver, target, memory),
+                    (True, 0),
+                )
+
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))
         xor_futures: list[tuple[int, int]] = []
