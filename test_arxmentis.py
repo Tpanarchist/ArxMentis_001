@@ -250,6 +250,45 @@ class PersistentStateTests(unittest.TestCase):
                     (1, 0),
                 )
 
+    def test_existing_policy_actions_cannot_prepare_for_next_context_from_zero(self) -> None:
+        for policy_value in (0, 1):
+            with self.subTest(policy_value=policy_value):
+                with tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    driver = root / "driver"
+                    target = root / "target"
+                    memory = root / "memory"
+                    policy_zero = root / "policy-zero"
+                    policy_one = root / "policy-one"
+                    write_state(0, driver)
+                    write_state(0, target)
+                    write_state(0, memory)
+                    write_state(policy_value, policy_zero)
+                    write_state(0, policy_one)
+
+                    _, prepared_target, _, _, _ = contextual_adaptive_transition(
+                        driver,
+                        target,
+                        memory,
+                        policy_zero,
+                        policy_one,
+                    )
+                    self.assertEqual(prepared_target, 0)
+                    self.assertEqual(
+                        (read_state(driver), read_state(target)),
+                        (0, 0),
+                    )
+
+                    toggle_state(driver)
+                    self.assertEqual(
+                        evaluate_criterion(driver, target, memory),
+                        (False, 1),
+                    )
+                    self.assertEqual(
+                        (read_state(driver), read_state(target)),
+                        (1, 0),
+                    )
+
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))
         xor_futures: list[tuple[int, int]] = []
