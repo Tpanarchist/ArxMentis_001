@@ -141,3 +141,37 @@ def minimum_states_for_fixed_binary_change_prediction() -> int:
         if can_predict_fixed_binary_change_laws(state_count):
             return state_count
     raise AssertionError("search bound should contain a solution")
+
+
+def all_binary_deterministic_laws() -> tuple[tuple[int, int], ...]:
+    """All deterministic next-state functions from one binary state to one bit."""
+    return tuple(product((0, 1), repeat=2))
+
+
+def can_predict_all_binary_deterministic_laws(model_state_count: int) -> bool:
+    """Whether model states can exactly represent all four binary transition laws."""
+    if model_state_count < 1:
+        raise ValueError("model_state_count must be positive")
+
+    laws = all_binary_deterministic_laws()
+    for encoder in product(range(model_state_count), repeat=len(laws)):
+        for decoder_flat in product((0, 1), repeat=model_state_count * 2):
+
+            def predict(state: int, current: int) -> int:
+                return decoder_flat[state * 2 + current]
+
+            if all(
+                predict(encoder[law_index], current) == law[current]
+                for law_index, law in enumerate(laws)
+                for current in (0, 1)
+            ):
+                return True
+    return False
+
+
+def minimum_states_for_all_binary_deterministic_prediction() -> int:
+    """Smallest model state space that can represent all four binary laws."""
+    for state_count in range(1, 5):
+        if can_predict_all_binary_deterministic_laws(state_count):
+            return state_count
+    raise AssertionError("search bound should contain a solution")
