@@ -122,6 +122,19 @@ produce anticipatory regulation under a perfectly alternating environment. It
 does not show that ArxMentis predicts the environment or learns when to toggle:
 the action and environmental schedule are externally imposed.
 
+The delayed-credit test uses P=`0` for no-op and P=`1` for toggle. At each
+episode boundary it restores D2 to the current D1 but preserves P, then applies
+the selected action, flips D1, and only then evaluates equality and updates P
+with win-stay/lose-shift. P=`0` first produces a later error and switches to
+P=`1`. The toggle action then temporarily breaks equality before the
+environment flip restores it; the delayed evaluation succeeds and retains
+P=`1`. Across eight episodes, outcomes are `1, 0, 0, 0, 0, 0, 0, 0` and the
+policy updates are `(0 -> 1)` followed by seven `(1 -> 1)` updates. This
+demonstrates delayed credit assignment using existing persistent state and
+operations under the imposed alternating schedule; the episode reset and
+environment timing remain externally controlled, so this does not establish
+that ArxMentis predicts the environment.
+
 Order matters when both directions are applied. Starting at `(D1, D2) = (1, 0)`,
 stepping D2 and then D1 produces `(0, 1)`. Stepping D1 and then D2 produces
 `(1, 1)`. The same dependent transitions therefore yield different final

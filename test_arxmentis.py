@@ -321,6 +321,51 @@ class PersistentStateTests(unittest.TestCase):
                     (True, 0),
                 )
 
+    def test_policy_receives_credit_after_environment_transition(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            driver = root / "driver"
+            target = root / "target"
+            memory = root / "memory"
+            policy = root / "policy"
+            write_state(0, driver)
+            write_state(0, target)
+            write_state(0, memory)
+            write_state(0, policy)
+
+            outcomes: list[int] = []
+            policy_updates: list[tuple[int, int]] = []
+            for _ in range(8):
+                write_state(read_state(driver), target)
+                self.assertEqual(read_state(target), read_state(driver))
+
+                selected_policy = read_state(policy)
+                if selected_policy == 1:
+                    toggle_state(target)
+                prepared_target = read_state(target)
+                self.assertEqual(prepared_target, read_state(driver) ^ selected_policy)
+
+                toggle_state(driver)
+                post_environment_state = (
+                    read_state(driver),
+                    read_state(target),
+                )
+                satisfied, error = evaluate_criterion(driver, target, memory)
+                updated_policy = selected_policy if satisfied else 1 - selected_policy
+                write_state(updated_policy, policy)
+
+                outcomes.append(error)
+                policy_updates.append((selected_policy, updated_policy))
+                self.assertEqual(satisfied, error == 0)
+                self.assertEqual(
+                    post_environment_state[0] ^ post_environment_state[1],
+                    error,
+                )
+
+            self.assertEqual(outcomes, [1, 0, 0, 0, 0, 0, 0, 0])
+            self.assertEqual(policy_updates, [(0, 1)] + [(1, 1)] * 7)
+            self.assertEqual(read_state(policy), 1)
+
     def test_xor_transition_is_bijective_and_copy_is_not(self) -> None:
         states = ((0, 0), (0, 1), (1, 0), (1, 1))
         xor_futures: list[tuple[int, int]] = []
