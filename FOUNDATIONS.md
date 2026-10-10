@@ -1977,6 +1977,261 @@ preserved. `git diff --check` and whitespace checks pass. Only the five requeste
 research files are modified. The complete prior 111-test record remains nested
 in validation_results.json.
 
+## 18. Stored Semantic Length Boundary
+
+This experiment tests whether persistent state determines whether a second stored
+instruction contributes, while keeping the independently established common
+alphabet. It adds no runtime function, configured carrier, pointer, opcode, branch
+or loop. The previous sections and evidence fingerprints remain historical records.
+
+### Composition-derived meanings and representation capacity
+
+Logical roles are `(L,P0,P1,A,B)`. `L=0` means P0 only, with canonical unused P1=0;
+`L=1` means P0 followed by P1. Resampling actual toggle and three-XOR swap gives
+`X=(2,3,0,1)`, `S=(0,2,1,3)`, `R=S after X=(1,3,0,2)` on data order 00,01,10,11.
+The following maps are composed from that alphabet rather than installed as six laws.
+
+| Code L P0 P1 | Stored word | Outputs for 00,01,10,11 | Group member |
+|---|---|---|---|
+| 000 | X | 10,11,00,01 | X |
+| 010 | R | 01,11,00,10 | R |
+| 100 | X,X | 00,01,10,11 | identity |
+| 101 | X,R | 00,10,01,11 | S |
+| 110 | R,X | 11,01,10,00 | S then complement both |
+| 111 | R,R | 11,10,01,00 | complement both |
+
+All six are distinct members of the resampled eight-element X/S group. Six
+program distinctions need at least `ceil(log2(6))=3` binary distinctions. Three
+bits have eight codes; two bits cannot encode six. This representation lower bound
+says nothing about executability. Six canonical codes times four data states give
+24 required distinctions in the five-bit cube. Reserved 001 and 011 contribute
+eight unused configurations, without canonical entry or exit semantics.
+
+### Natural total target and an all-length obstruction
+
+Natural total semantics preserves all program bits and ignores P1 for L=0. For
+codes 000..111 the data maps are X,X,R,R,I,S,SXY,XY. The complete 32-state table,
+with inputs and outputs encoded by `(L,P0,P1,A,B)`, is:
+
+```text
+ 2  3  0  1   6  7  4  5   9 11  8 10  13 15 12 14
+16 17 18 19  20 22 21 23  27 25 26 24  31 30 29 28
+```
+
+Image size is 32 and the target is bijective. Program-coordinate ANFs are identity.
+With XOR addition and Boolean multiplication, the data ANFs are:
+
+```text
+A' = 1 + A + P0 + P0*A + P0*B + L + L*P1*A + L*P1*B
+B' =     B + P0 + P0*A + P0*B     + L*P1*A + L*P1*B
+```
+
+Both data outputs have degree three, so the map is nonaffine. Sampling all 225
+admitted distinct-role low-level calls gives 45 affine bijections of rank 32,
+60 plastic calls of rank 24 and 120 copy/evaluation calls of rank 16. There are
+175 unique full-state tables. Deterministic composition cannot regain lost rank.
+A total bijection must therefore compose only the affine bijective primitives;
+its result would be affine. This nonaffine total target is impossible at every
+length on five carriers. No bounded search is used as an absence proof.
+
+### The canonical 24-state target also fails
+
+The canonical endpoint is an odd permutation of its entry domain: R, S and SXY
+are the three odd program blocks; X, I and XY are even. The exact-restored slot-0
+boundary is also odd, since three canonical programs have P0=1 and apply R.
+The complement of the canonical domain is an affine three-flat: the reserved code
+pair is an affine line crossed with both data coordinates.
+
+The complete reached-set certificate was regenerated from current runtime tables:
+620 vertices, 52,700 candidate edges and 16,460 admissible edges, consisting of
+15,500 affine edges and 960 plastic edges. Signed-edge SHA-256 is
+`43fd86e6e3f88de5eaec44532653210dee01d2333cec2b78a74b2e79cc7a6803`.
+Each edge satisfies `sign = h(source) XOR h(destination)`.
+
+Every viable prefix must preserve 24 distinct trajectories. Affine bijections
+preserve the complement-of-three-flat shape. Any injective plastic restriction
+to 24 rows fills its entire global rank 24 image, also such a complement.
+Rank16 copy/evaluation cannot preserve the required distinctions. Edge signs
+telescope, making every path returning to its entry domain even. The odd endpoint
+is therefore impossible at every length, even if reserved codes are used. This
+also rules out every semantic-boundary witness, including weaker invertibly
+transported program representations at its cut. An exact-restored slot-0 prefix
+is separately impossible by its odd sign.
+
+Both five-carrier search questions thus have exact negative answers by an invariant,
+with no witness or finite minimum. Eight unused configurations are insufficient
+for this particular target. There is no witness remaining inside canonical codes
+either. A flat six-way selector with identical code/map assignments fails equally.
+
+### One authorized temporary bit restores the boundary
+
+Only after proving the five-carrier limitation did the research use one temporary
+sixth file W, without configuring it. Roles become `(L,P0,P1,A,B,W)`. Both old W
+values are admitted: 48 physical input rows correspond to 24 required program/data
+classes. Old W is expendable and final W is zero; no clean initialization is assumed.
+One extra binary capacity is necessary and sufficient for this declared task.
+No new primitive law is necessary.
+
+The native fourteen-call witness is identical for every admitted input:
+
+```text
+ 1 toggle(A)
+ 2 copy(A,B,W)
+ 3 plastic(W,A,P0)
+ 4 plastic(A,W,P0)
+ 5 plastic(B,A,P0)
+ 6 copy(W,A,B)
+ 7 xor(A,W)              <-- one fixed semantic slot boundary
+ 8 xor(L,A)
+ 9 copy(A,B,W)
+10 plastic(W,A,P1)
+11 plastic(A,W,P1)
+12 plastic(B,A,P1)
+13 copy(W,A,B)
+14 xor(A,W)
+```
+
+Calls 1..7 transport the common seven-call decoder to P0. Actual-file observations
+at call seven show original L/P0/P1, data F_P0(original data), and W=0 for all 48
+inputs. Calls 8..14 transport the existing factorized executor to controls L/P1;
+its action is S^P1 after X^L. On canonical L=0,P1=0 it is identity. On L=1 it is
+X or R according to P1. Thus the suffix conditionally contributes slot1 without
+a harness branch inspecting stored state. The same prefix always runs.
+
+Independent external six-role searches use all 48 inputs and the complete admitted
+basis. Boundary constraints allow any one internal cut shared by every row, with
+exact program restoration and correct first-slot data there; W is free at the
+searched cut. These are separate searches from the endpoint contract.
+
+| Target | Proven lower bound | Witness upper bound | Minimum |
+|---|---:|---:|---|
+| Five-role canonical endpoint | impossible at every length | none | none |
+| Five-role semantic boundary | impossible at every length | none | none |
+| Six-role endpoint | 6 calls | 14 calls | unresolved |
+| Six-role exact-program boundary | 8 calls | 14 calls | unresolved |
+
+Endpoint lengths 0..5 are UNSAT; 6 and 7 time out. Boundary lengths 0..7 are UNSAT on
+the retained run. Lengths 8..13 were not searched. Each query retains actual timing
+and status: five seconds per check below length 5, twenty thereafter, with one
+second of additional wall-budget margin. No all-shortest-word enumeration was
+attempted. Endpoint minimum is in 6..14; exact-program boundary minimum is in 8..14.
+The latter lower bound does not cover weaker recoverable program encodings at a
+cut. Upper witnesses are constructions from established support, not solver-found
+minima. Timeout is never absence evidence.
+
+On clean W=0 all 24 required classes stay distinct at every prefix. Retained actual
+sets include hull size, global-prefix rank, next-operation restriction rank and
+whether the next operation fills its complete global image. Every noninjective
+call is injective on the reached 24-state set. Six-role plastic has global rank48;
+a 24-row restriction need not fill that image, unlike the five-role rank 24 case.
+Both-old-W trajectories collapse only expendable information, from 48 inputs to 24
+outputs. Native program bits stay unchanged throughout, so reserved codes001/011
+are never visited. Temporary W is separate from representational slack.
+
+The actual full64-row extension has rank 32 and degree2. It differs from natural
+total semantics on reserved codes. Those rows have implementation outputs but
+no canonical program meanings; success is credited only on the 48 admitted rows.
+
+### Causal edits, repetition, persistence and physical maps
+
+All four data states are replayed for length-only edits000 -> 100 and010 -> 110.
+Only L is edited; other program bytes are unchanged. The data result differs on
+every input exactly as appending the second X predicts. Slot1 edits100 -> 101 and
+110 -> 111 and slot0 edits100 -> 110 and101 -> 111 also cover all four data inputs,
+holding other program bytes fixed. There are 24 actual-file intervention pairs.
+
+Repetition evidence comes from actual intermediate files. Under 100, data at call 7
+is X(data) before the second X gives identity. Under 111 it is R(data) before the
+second R complements both bits. For example00 goes 10 -> 00 under 100 and 01 -> 11 under 111.
+Every data state and both old W values are retained, beyond these examples.
+
+Six separate initializer processes each persist one program and exit. Forty-eight
+separate consumer processes reuse each program across all four data states twice,
+rewriting only A/B between executions. W is initially arbitrary and ends zero.
+L/P0/P1 remain byte-identical across execution and process death. Physical remapping
+checks all 120 assignments of the five roles to temporary files named after the
+configured carrier identities, with W separate: 2,880 actual-file executions check
+both the fixed cut and endpoint. Configured state files are not experimental scratch.
+
+### Length and instruction recoding are distinct maps
+
+Complementing only L uses mask 16 on five bits, 32 on six. The transported canonical
+codes are `{000,001,010,011,100,110}`, with reserved101/111; length one now has L=1.
+Complementing P0 and P1 together uses mask 12 on five bits, 24 on six, preserving L
+meanings. Its canonical codes are `{001,011,100,101,110,111}`, with reserved000/010;
+inactive P1 is now 1. Each transported endpoint and boundary is a conjugate of the
+composition-derived native semantics, not a newly assigned table family.
+
+Both maps succeed with sixteen-call temporary-workspace witnesses and the same cut
+at 7, exact stored program recovery, W=0 at cut/exit and all 48 actual-file input rows.
+Length transport keeps the native prefix and conjugates its suffix by toggle(L).
+Instruction transport uses the established recoded common decoder and conjugates
+the suffix by toggle(P1). Their five-role domains remain complements of affine
+three-flats, and endpoint sign remains odd, preserving the all-length obstruction.
+Recoded six-role minima have not been searched.
+
+The length-transport witness temporarily visits its reserved codes101/111; the
+instruction-transport witness visits its reserved000/010. Each stage records those
+visits explicitly. They have no canonical entry/exit meanings. Necessity of these
+visits for all possible transported witnesses is not established. Native execution
+avoids reserved codes. Physical identity, bit encoding, common instruction meaning
+and sequence position are distinct external maps, not endogenous discoveries.
+
+The flat six-way control has the exact same endpoint table, obstruction and shared
+temporary-workspace endpoint search. No cost or extensional edit advantage is
+claimed. Additional sequence evidence is the common alphabet, semantic boundary,
+repetition, local substitution and length intervention. A flat selector can use
+the same internal support; endpoint behavior alone gives no semantic-length claim.
+The evidence does not attach intrinsic semantic types to the three program carriers.
+
+### Earned claim, accounting and next boundary
+
+With one temporary extra binary capacity, persistent state represents both
+instruction content and whether a second stored position is semantically active.
+One fixed externally supplied executor first realizes the independently grounded
+slot0 meaning and then conditionally realizes slot1 according to persisted length.
+This establishes stored semantic length of one or two instructions in the research
+witness. The unchanged five configured capacities alone are proven insufficient
+for this canonical task. The native executor always runs fourteen primitive calls;
+actual variable execution count or early termination is not established.
+
+| Contribution | Required or supplied externally |
+|---|---|
+| Carrier/state | five assigned capacities plus temporary W; filesystem/process persistence |
+| Transformation laws | unchanged hard-coded equations; composed decoder and suffix retain all support |
+| Representation/maps | X/R alphabet; at most two positions; canonical unused slot; physical/encoding maps |
+| Sequencing | external construction/search and retention; P0 first, P1 second; fixed call word and invocation |
+| Environment | initial program writes, data resets, temporary paths, process scheduling |
+| Evaluator | composition-derived targets, shared cut, exact restoration, interventions and reuse criteria |
+
+Evidence dependencies branch. Three program bits supply representational capacity;
+a separate geometry/parity proof forces extra execution capacity. Common slot
+semantics plus an actual cut, interventions, repetition and reuse support semantic
+length; endpoint realization supports selection. These scoped witnesses do not
+prove universal semantic dependencies. Stored L moves second-position activation
+into persistent state, while Python still supplies max-two-position grammar,
+relative order, alphabet, retained executor and invocation.
+
+No VM, program counter, arbitrary length, branch, jump, loop, synthesis,
+self-modification or endogenous control was implemented. The next clean question
+is whether a persistent execution-state distinction can identify which stored
+position is active and support advancement through a reusable step. That
+program-counter-like experiment remains future work.
+
+### Reproduction and validation
+
+Regenerate only this new section with the explicit Python 3.14.6 repository venv:
+`.venv/Scripts/python.exe -B composition_experiments.py --length-experiment --output
+composition_results.json`. Earlier sections are retained rather than searched again.
+Run `test_composition_experiments.SemanticLengthTests` first, then the complete
+suite. Final test counts, installed Pylance results, protected-source hashes and
+artifact checks are recorded in `validation_results.json`. The final focused run
+passed 18 tests in 110.027 seconds; the full run passed 146 tests in 561.472 seconds
+(40 historical, 88 prior research, 18 new). Installed Pylance 2026.4.1 reports zero
+Python diagnostics on both changed Python files, with current-source SHA verification.
+`git diff --check` passes; all twelve previous evidence sections and their
+fingerprints, previous test bytes and previous foundations bytes are preserved.
+
 ## Reproduction and first-pass validation
 
 Use the explicit repository interpreter:

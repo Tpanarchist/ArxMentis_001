@@ -705,7 +705,9 @@ def symbolic_program_search(width: int, initial: Table, target: Table, length: i
                             wall_seconds: float = 180.0,
                             allowed_schemas: Sequence[str] | None = None,
                             incremental_rows: bool = False,
-                            injective_prefixes: bool = False) -> tuple[list[tuple[Operation, ...]], dict[str, object]]:
+                            injective_prefixes: bool = False,
+                            boundary_target: Table | None = None,
+                            boundary_coordinates: Sequence[int] | None = None) -> tuple[list[tuple[Operation, ...]], dict[str, object]]:
     """Exact finite-word constraint search, an external meta-tool.
 
     A single operation choice per position is shared by EVERY declared input.
@@ -727,6 +729,12 @@ def symbolic_program_search(width: int, initial: Table, target: Table, length: i
     planes: list[z3.BitVecRef] = [z3.BitVecVal(sum(((state >> (width - 1 - j)) & 1) << r
                               for r, state in enumerate(initial)), rows) for j in range(width)]
     choices = []
+    boundary_conditions = []
+    if boundary_target is not None and len(boundary_target) != rows:
+        raise ValueError("Boundary rows must correspond to initial rows")
+    coordinates = tuple(range(width)) if boundary_coordinates is None else tuple(boundary_coordinates)
+    if any(j < 0 or j >= width for j in coordinates):
+        raise ValueError("Invalid boundary coordinate")
     for step in range(length):
         kind, d, t, m = (z3.BitVec(f"op_{step}_{name}", 3) for name in ("kind", "d", "t", "m"))
         choices.append((kind, d, t, m))
@@ -761,6 +769,13 @@ def symbolic_program_search(width: int, initial: Table, target: Table, length: i
                             for row in range(rows)]
             solver.add(z3.Distinct(*encoded_rows))
         planes = outputs
+        if boundary_target is not None and step + 1 < length:
+            boundary_conditions.append(z3.And(*(planes[j] == sum(
+                ((state >> (width - 1 - j)) & 1) << r
+                for r, state in enumerate(boundary_target)) for j in coordinates)))
+    if boundary_target is not None:
+        # A single cut shared by all rows; this is an external search constraint.
+        solver.add(z3.Or(*boundary_conditions))
     goal_targets = (target,) if alternatives is None else tuple(alternatives)
     goal = z3.BitVec("goal", max(1, (len(goal_targets) - 1).bit_length()))
     asserted_rows = {0} if incremental_rows else set(range(rows))
@@ -834,6 +849,8 @@ def symbolic_program_search(width: int, initial: Table, target: Table, length: i
                                for variable, value in zip(choice, values, strict=True))))
     return sorted(words), {"method": "complete finite bit-vector constraint search",
                           "width": width, "domain_rows": rows, "length": length,
+                          "boundary_required": boundary_target is not None,
+                          "boundary_coordinates": list(coordinates) if boundary_target is not None else None,
                           "allowed_schemas": list(allowed_schemas) if allowed_schemas is not None else None,
                           "incremental_rows": incremental_rows, "injective_prefixes": injective_prefixes, "asserted_row_count": len(asserted_rows),
                           "refinement_checks": refinement_checks,
@@ -1981,6 +1998,284 @@ def stored_sequence_experiment(searches: dict[str, object]) -> dict[str, object]
             for key, value in previous.items() if key not in ("scope", "stored_sequence")}}
 
 
+
+SEMANTIC_LENGTH_CODES = (0, 2, 4, 5, 6, 7)
+
+
+def semantic_length_alphabet() -> tuple[Table, Table]:
+    """Resample the common instruction meanings from current file operations."""
+    x = sample_program(2, (("toggle", (0,)),))
+    swap = sample_program(2, (("xor", (0, 1)), ("xor", (1, 0)), ("xor", (0, 1))))
+    return x, compose(x, swap)
+
+
+def semantic_length_family(alphabet: tuple[Table, Table]) -> dict[int, Table]:
+    family = {code: (alphabet[(code >> 1) & 1] if code < 4 else
+                    compose(alphabet[(code >> 1) & 1], alphabet[code & 1]))
+              for code in SEMANTIC_LENGTH_CODES}
+    if len(set(family.values())) != 6:
+        raise AssertionError("Six composition-derived meanings are not distinct")
+    return family
+
+
+def semantic_length_target(alphabet: tuple[Table, Table]) -> Table:
+    """Natural total five-bit semantics; physically preserve ignored P1."""
+    return tuple((i & ~3) | (alphabet[(i >> 3) & 1][i & 3] if i < 16 else
+                 compose(alphabet[(i >> 3) & 1], alphabet[(i >> 2) & 1])[i & 3])
+                 for i in range(32))
+
+
+def semantic_length_executor(recoding: str = "native") -> tuple[Operation, ...]:
+    """Temporary six-role canonical witness with a fixed cut after seven calls.
+
+    Prefix uses the common slot decoder. On canonical suffix entries P1=0
+    whenever L=0, so factorized S^P1 X^L is identity for inactive slot 1.
+    This is NOT the natural total extension on the reserved program codes.
+    """
+    if recoding not in ("native", "length", "instructions"):
+        raise ValueError("Declare native, length or instruction encoding")
+    prefix_roles = (1, 3, 4, 5)
+    prefix = tuple((kind, tuple(prefix_roles[i] for i in roles))
+                   for kind, roles in stored_instruction_executor(recoding == "instructions"))
+    suffix_roles = (0, 2, 3, 4, 5)
+    suffix = tuple((kind, tuple(suffix_roles[i] for i in roles))
+                   for kind, roles in factorized_executor())
+    if recoding != "native":
+        changed = 0 if recoding == "length" else 2
+        flip: tuple[Operation, ...] = (("toggle", (changed,)),)
+        suffix = flip + suffix + flip
+    return prefix + suffix
+
+
+def semantic_length_contract(alphabet: tuple[Table, Table], workspace: bool = False,
+                             recoding: str = "native") -> tuple[Table, Table, Table]:
+    """Domain, endpoints, exact program/data slot boundary in corresponding row order."""
+    if recoding not in ("native", "length", "instructions"):
+        raise ValueError("Invalid representation map")
+    mask = {"native": 0, "length": 16, "instructions": 12}[recoding]
+    total = semantic_length_target(alphabet)
+    domain = tuple(4 * code + data for code in SEMANTIC_LENGTH_CODES for data in range(4))
+    outputs = tuple(total[i] for i in domain)
+    boundary = tuple((i & ~3) | alphabet[(i >> 3) & 1][i & 3] for i in domain)
+    if not workspace:
+        return (tuple(i ^ mask for i in domain), tuple(i ^ mask for i in outputs),
+                tuple(i ^ mask for i in boundary))
+    return (tuple(2 * (i ^ mask) + w for i in domain for w in (0, 1)),
+            tuple(2 * (i ^ mask) for i in outputs for _ in (0, 1)),
+            tuple(2 * (i ^ mask) for i in boundary for _ in (0, 1)))
+
+
+def semantic_length_cuts(initial: Table, boundary: Table, word: Sequence[Operation],
+                         sampled: dict[Operation, Table]) -> list[int]:
+    """All genuine fixed cuts, exact first five coordinates; W unconstrained."""
+    current = initial
+    cuts = []
+    for step, op in enumerate(word, 1):
+        current = tuple(sampled[op][i] for i in current)
+        if step < len(word) and all(a >> 1 == b >> 1 for a, b in zip(current, boundary, strict=True)):
+            cuts.append(step)
+    return cuts
+
+
+def search_semantic_length(alphabet: tuple[Table, Table]) -> dict[str, object]:
+    """Separate external searches, after the all-length five-role obstruction."""
+    initial, required, boundary = semantic_length_contract(alphabet, True)
+    result: dict[str, object] = {}
+    for name in ("endpoint", "boundary"):
+        checks = []
+        found = []
+        for length in range(8):
+            timeout = 5_000 if length < 5 else 20_000
+            words, record = symbolic_program_search(6, initial, required, length,
+                enumerate_all=False, timeout_ms=timeout, wall_seconds=timeout / 1000 + 1,
+                boundary_target=boundary if name == "boundary" else None,
+                boundary_coordinates=tuple(range(5)))
+            checks.append(record)
+            found.extend(words)
+            print(f"semantic length {name}: {length} calls {record['status']}", flush=True)
+            if words:
+                break
+        result[name] = {"checks": checks, "words": found,
+            "scope": "48 rows, arbitrary old W; boundary search constrains one shared cut, W free at cut",
+            "searched_through": checks[-1]["length"], "enumeration_of_all_shortest_words": False}
+    return result
+
+
+def semantic_length_experiment() -> dict[str, object]:
+    """Prove five-role failure before temporary-workspace semantic tests."""
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parent
+    previous = json.loads((root / "composition_results.json").read_text(encoding="utf-8"))
+    alphabet = semantic_length_alphabet()
+    family = semantic_length_family(alphabet)
+    total = semantic_length_target(alphabet)
+    initial5, target5, boundary5 = semantic_length_contract(alphabet)
+    raw = sample_basis(5, role_complete_basis(5))
+    basis, _ = canonical_basis(raw)
+    certificate = rank24_orientation_certificate(basis)
+    assert initial5 in cast(tuple[Table, ...], certificate["vertices"])
+    assert len(set(total)) == 32 and not is_affine(total)
+    assert all(is_affine(t) for t in raw.values() if len(set(t)) == 32)
+    assert permutation_parity(target5, initial5) == 1
+    assert permutation_parity(boundary5, initial5) == 1
+    # These invariant checks gate the authorized temporary sixth file.
+    searches = search_semantic_length(alphabet)
+    words = {name: semantic_length_executor(name) for name in ("native", "length", "instructions")}
+    sampled = {op: sample_program(6, (op,)) for word in words.values() for op in word}
+    full_tables = {name: sample_program(6, word) for name, word in words.items()}
+    contracts = {name: semantic_length_contract(alphabet, True, name) for name in words}
+    trajectories = {}
+    recodings = {}
+    for name, word in words.items():
+        initial, required, boundary = contracts[name]
+        assert tuple(full_tables[name][i] for i in initial) == required
+        cuts = semantic_length_cuts(initial, boundary, word, sampled)
+        assert 7 in cuts
+        clean = tuple(initial[i] for i in range(0, len(initial), 2))
+        reserved = sorted(set(range(8)) - {i >> 3 for i in initial})
+        traces = subset_trajectory(6, clean, word, sampled, reserved)
+        assert all(row["cardinality"] == 24 for row in traces)
+        assert all(row["next_is_injective"] for row in traces[:-1])
+        if name == "native":
+            assert all(not row["reserved_codes_occupied"] for row in traces)
+        trajectories[name] = {"canonical_W0": traces,
+            "both_old_W": subset_trajectory(6, initial, word, sampled, reserved)}
+        recodings[name] = {"domain": initial, "required": required, "boundary": boundary,
+            "canonical_program_codes": sorted({i >> 3 for i in initial}), "reserved_program_codes": reserved,
+            "word": word, "upper_bound": len(word), "minimum": None, "fixed_cuts": cuts,
+            "reserved_codes_visited": sorted({c for row in traces for c in cast(list[int], row["reserved_codes_occupied"])}),
+            "five_carrier_impossible": True, "full_extension": table_properties(full_tables[name])}
+    boundary_rows = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for name, word in words.items():
+            initial, required, boundary = contracts[name]
+            for state, output, cut_state in zip(initial, required, boundary, strict=True):
+                mid = execute(states(6)[state], word[:7], paths)
+                assert mid == states(6)[cut_state]
+                for op in word[7:]:
+                    apply_operation(op, paths)
+                final = tuple(runtime.read_state(p) for p in paths)
+                assert final == states(6)[output]
+                boundary_rows.append({"encoding": name, "input": state, "cut": mid, "output": final})
+    summaries = {}
+    for name, value in searches.items():
+        record = cast(dict[str, object], value)
+        candidates = cast(list[tuple[Operation, ...]], record["words"]) + [words["native"]]
+        word = min(candidates, key=lambda w: (len(w), w))
+        for op in word:
+            if op not in sampled:
+                sampled[op] = sample_program(6, (op,))
+        actual = sample_program(6, word)
+        initial, required, boundary = contracts["native"]
+        assert tuple(actual[i] for i in initial) == required
+        cuts = semantic_length_cuts(initial, boundary, word, sampled)
+        if name == "boundary":
+            assert cuts
+        negative = {cast(int, c["length"]) for c in cast(list[dict[str, object]], record["checks"])
+                    if c["status"] == "unsat"}
+        lower = 0
+        while lower in negative:
+            lower += 1
+        summaries[name] = {"word": word, "upper_bound": len(word), "lower_bound": lower,
+            "minimum": len(word) if lower == len(word) else None, "fixed_cuts": cuts,
+            "unresolved_lengths": [k for k in range(lower, len(word)) if k not in negative],
+            "search": record}
+    remapping = 0
+    with tempfile.TemporaryDirectory() as directory:
+        physical = tuple(Path(directory) / name for name in (".arxmentis-state", ".arxmentis-state-2",
+            ".arxmentis-memory", ".arxmentis-policy", ".arxmentis-policy-1"))
+        workspace = Path(directory) / "W-temporary"
+        for assignment in permutations(physical):
+            paths = (*assignment, workspace)
+            for i in range(0, 48, 2):
+                state = contracts["native"][0][i]
+                mid = execute(states(6)[state], words["native"][:7], paths)
+                assert mid == states(6)[contracts["native"][2][i]]
+                for op in words["native"][7:]:
+                    apply_operation(op, paths)
+                assert tuple(runtime.read_state(p) for p in paths) == states(6)[contracts["native"][1][i]]
+                remapping += 1
+    interventions = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for first, second, changed in ((0, 4, 0), (2, 6, 0), (4, 5, 2), (6, 7, 2), (4, 6, 1), (5, 7, 1)):
+            for data in range(4):
+                first_state = states(6)[8 * first + 2 * data]
+                before = execute(first_state, words["native"], paths)
+                program_bytes = tuple(p.read_bytes() for p in paths[:3])
+                runtime.write_state(states(3)[second][changed], paths[changed])
+                assert all(paths[j].read_bytes() == program_bytes[j] for j in range(3) if j != changed)
+                runtime.write_state(data >> 1, paths[3]); runtime.write_state(data & 1, paths[4])
+                for op in words["native"]:
+                    apply_operation(op, paths)
+                after = tuple(runtime.read_state(p) for p in paths)
+                assert before == (*states(3)[first], family[first][data] >> 1, family[first][data] & 1, 0)
+                assert after == (*states(3)[second], family[second][data] >> 1, family[second][data] & 1, 0)
+                if changed == 0:
+                    assert before[3:5] != after[3:5]
+                interventions.append({"codes": [first, second], "changed_coordinate": changed,
+                    "data": data, "before": before, "after": after, "other_program_bytes_unchanged": True})
+    initialize = "from pathlib import Path; import sys,arxmentis as r; [r.write_state(int(v),Path(p)) for v,p in zip(sys.argv[1:4],sys.argv[4:7])]"
+    consume = "from pathlib import Path; import sys,composition_experiments as r; p=tuple(Path(s) for s in sys.argv[1:]); [r.apply_operation(op,p) for op in r.semantic_length_executor()]"
+    consumers = 0
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for code in SEMANTIC_LENGTH_CODES:
+            subprocess.run([sys.executable, "-B", "-c", initialize, *(str(v) for v in states(3)[code]),
+                            *(str(p) for p in paths[:3])], cwd=root, check=True, capture_output=True)
+            saved = tuple(p.read_bytes() for p in paths[:3])
+            runtime.write_state(1, paths[5])
+            for data in tuple(range(4)) * 2:
+                runtime.write_state(data >> 1, paths[3]); runtime.write_state(data & 1, paths[4])
+                subprocess.run([sys.executable, "-B", "-c", consume, *(str(p) for p in paths)],
+                               cwd=root, check=True, capture_output=True)
+                assert tuple(p.read_bytes() for p in paths[:3]) == saved
+                assert tuple(runtime.read_state(p) for p in paths) == (
+                    *states(3)[code], family[code][data] >> 1, family[code][data] & 1, 0)
+                consumers += 1
+    flat = tuple((4 * code + family[code][data]) for code in SEMANTIC_LENGTH_CODES for data in range(4))
+    assert flat == target5
+    return {"roles": ["L", "P0", "P1", "A", "B"], "alphabet": alphabet,
+        "program_family": family, "six_distinct": True,
+        "representation": {"minimum_bits": 3, "codes": 8, "programs": 6,
+                           "execution_does_not_follow_from_capacity": True},
+        "natural_total": table_properties(total), "canonical_domain": initial5,
+        "canonical_target": target5, "canonical_boundary": boundary5,
+        "five_carrier": {"endpoint": "impossible at every length", "boundary": "impossible at every length",
+            "target_parity": 1, "boundary_parity": 1, "certificate": certificate,
+            "raw_basis_calls": len(raw), "unique_basis_tables": len(basis),
+            "rank_counts_raw": {str(k): sum(len(set(t)) == k for t in raw.values()) for k in (16, 24, 32)},
+            "all_bijective_primitives_affine": True,
+            "proof": "total: nonaffine bijection cannot follow rank loss or compose from affine bijections; canonical: odd permutation contradicts complete even-loop orientation certificate",
+            "geometry": "Every 24-row viable prefix is an affine-three-flat complement; plastic fills its global 24-state image, copy/evaluate rank16 cannot preserve24. No five-role witness exists, including a witness staying in canonical codes."},
+        "temporary_workspace": {"configured_added": 0, "temporary_bits": 1, "old_W_arbitrary": True,
+            "final_W": 0, "minimum_extra_binary_capacity": 1, "native_word": words["native"],
+            "native_cut": 7, "native_upper_bound": 14, "searches": summaries,
+            "scope": "canonical48 physical rows quotient to24 required program/data distinctions; not natural total semantics on reserved codes",
+            "physical_remapping_assignments": 120, "physical_remapping_rows": remapping,
+            "cut_rows": boundary_rows, "trajectories": trajectories,
+            "reserved_codes_visited_native": [],
+            "global_extension_differs_from_natural_on_reserved": True},
+        "interventions": interventions,
+        "reuse": {"initializer_processes": 6, "consumer_processes": consumers,
+            "executions_per_program": 8, "data_only_rewrites": True, "program_bytes_preserved": True},
+        "recodings": recodings, "length_mask_five": 16, "instruction_mask_five": 12,
+        "flat_control": {"canonical_target": flat, "identical_endpoint_target": True,
+            "five_carrier_impossible": True, "temporary_endpoint_search_shared_by_table_identity": True,
+            "boundary_constraint_additional": True, "no_cost_advantage_claimed": True},
+        "earned": "With one temporary extra binary capacity, persistent state represents instruction content and whether slot1 is active; a fixed external word realizes common slot0 semantics at one cut and conditionally slot1 afterward. Five configured capacities cannot realize this canonical target.",
+        "external_contributions": {"carrier": "five existing roles plus temporary W, filesystem/process persistence",
+            "law": "unchanged hard-coded toggle/XOR/copy/plastic/evaluation equations",
+            "representation": "max two slots; common X/R alphabet; P1=0 canonical when L=0; logical role assignments and recoding maps",
+            "sequencing": "external search/construction and retained word; slot0 first, slot1 second; fixed14 calls regardless length; no endogenous invocation",
+            "environment": "program initialization, data rewrites, physical paths, process scheduling",
+            "evaluator": "composition-derived target, all-input shared cut, exact program restoration, intervention criteria"},
+        "next_boundary": "persistent execution-state distinction identifying the active stored position; not implemented",
+        "preserved_previous_sections_sha256": {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+            for key, value in previous.items() if key not in ("scope", "semantic_length")}}
+
 def run_experiments() -> dict[str, object]:
     b2 = sample_basis(2, two_bit_basis())
     b3_ops = three_bit_basis()
@@ -2104,6 +2399,8 @@ def run_experiments() -> dict[str, object]:
     retained_factorized = (json.loads(result_path.read_text(encoding="utf-8")).get("factorized_selection")
                            if result_path.exists() else None)
     return {
+        "semantic_length": (json.loads(result_path.read_text(encoding="utf-8")).get("semantic_length")
+                            if result_path.exists() else None),
         "stored_sequence": (json.loads(result_path.read_text(encoding="utf-8")).get("stored_sequence")
                             if result_path.exists() else None),
         "factorized_selection": retained_factorized,
@@ -2177,8 +2474,15 @@ def main() -> None:
                         help="Recompute the finite slack/parity classification and temporary workspace witnesses")
     parser.add_argument("--sequence-search", action="store_true",
                         help="Recompute bounded fixed-length stored-sequence searches and runtime evidence")
+    parser.add_argument("--length-experiment", action="store_true",
+                        help="Recompute stored semantic length proof, separate searches and actual-file evidence")
     args = parser.parse_args()
-    result = run_experiments()
+    if args.length_experiment:
+        # Append evidence without recomputing or changing any earlier section.
+        result = json.loads(Path(__file__).with_name("composition_results.json").read_text(encoding="utf-8"))
+        result["semantic_length"] = semantic_length_experiment()
+    else:
+        result = run_experiments()
     if args.selector_search:
         result['factorized_selection'] = search_factorized_selection()
     if args.order_search:

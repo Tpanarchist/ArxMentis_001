@@ -1150,5 +1150,193 @@ class StoredSequenceTests(unittest.TestCase):
         self.assertEqual(len(self.evidence["preserved_previous_sections_sha256"]), 11)
 
 
+class SemanticLengthTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.evidence = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))["semantic_length"]
+        cls.alphabet = research.semantic_length_alphabet()
+        cls.family = research.semantic_length_family(cls.alphabet)
+        cls.word = research.semantic_length_executor()
+        cls.initial, cls.target, cls.boundary = research.semantic_length_contract(cls.alphabet, True)
+        cls.sampled = {op: research.sample_program(6, (op,)) for op in set(cls.word)}
+
+    def test_composition_derived_six_meanings_are_distinct(self) -> None:
+        expected = {0: (2, 3, 0, 1), 2: (1, 3, 0, 2), 4: (0, 1, 2, 3),
+                    5: (0, 2, 1, 3), 6: (3, 1, 2, 0), 7: (3, 2, 1, 0)}
+        self.assertEqual(self.family, expected)
+        self.assertEqual(len(set(self.family.values())), 6)
+        self.assertEqual(self.evidence["representation"]["minimum_bits"], 3)
+
+    def test_natural_total_target_rank_and_degree(self) -> None:
+        target = research.semantic_length_target(self.alphabet)
+        self.assertEqual(len(set(target)), 32)
+        self.assertFalse(research.is_affine(target))
+        anf = research.table_properties(target)["algebraic_normal_form"]
+        assert isinstance(anf, dict)
+        self.assertEqual(anf["degree"], 3)
+        for code in range(8):
+            for d in range(4):
+                expected = (self.alphabet[(code >> 1) & 1][d] if code < 4 else
+                            research.compose(self.alphabet[(code >> 1) & 1], self.alphabet[code & 1])[d])
+                self.assertEqual(target[4 * code + d], 4 * code + expected)
+
+    def test_total_obstruction_premises_are_runtime_grounded(self) -> None:
+        raw = research.sample_basis(5, research.role_complete_basis(5))
+        self.assertEqual(len(raw), 225)
+        self.assertTrue(all(research.is_affine(t) for t in raw.values() if len(set(t)) == 32))
+        self.assertEqual({len(set(t)) for t in raw.values()}, {16, 24, 32})
+
+    def test_canonical_domain_and_endpoint_are_odd(self) -> None:
+        initial, target, boundary = research.semantic_length_contract(self.alphabet)
+        self.assertEqual(len(initial), 24)
+        self.assertEqual(set(initial), set(target))
+        self.assertEqual(set(initial), set(boundary))
+        self.assertEqual(research.permutation_parity(target, initial), 1)
+        self.assertEqual(research.permutation_parity(boundary, initial), 1)
+        self.assertEqual({i >> 2 for i in set(range(32)) - set(initial)}, {1, 3})
+
+    def test_complete_orientation_certificate_recomputed(self) -> None:
+        raw = research.sample_basis(5, research.role_complete_basis(5))
+        basis, _ = research.canonical_basis(raw)
+        certificate = research.rank24_orientation_certificate(basis)
+        import json
+        self.assertEqual(json.loads(json.dumps(certificate)), self.evidence["five_carrier"]["certificate"])
+        self.assertEqual(certificate["vertex_count"], 620)
+        self.assertEqual(certificate["edge_count"], 16460)
+        self.assertEqual(certificate["candidate_edges_examined"], 52700)
+
+    def test_temporary_workspace_full_contract_and_cut(self) -> None:
+        actual = research.sample_program(6, self.word)
+        self.assertEqual(tuple(actual[i] for i in self.initial), self.target)
+        self.assertIn(7, research.semantic_length_cuts(self.initial, self.boundary, self.word, self.sampled))
+        self.assertEqual(len(self.word), 14)
+
+    def test_actual_file_boundary_and_suffix_without_reset(self) -> None:
+        import tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            for state, expected, middle in zip(self.initial, self.target, self.boundary, strict=True):
+                self.assertEqual(research.execute(research.states(6)[state], self.word[:7], paths),
+                                 research.states(6)[middle])
+                for op in self.word[7:]:
+                    research.apply_operation(op, paths)
+                self.assertEqual(tuple(runtime.read_state(p) for p in paths), research.states(6)[expected])
+
+    def test_both_repetitions_have_real_checkpoints(self) -> None:
+        prefix = research.sample_program(6, self.word[:7])
+        final = research.sample_program(6, self.word)
+        for code in (4, 7):
+            for d in range(4):
+                i = 8 * code + 2 * d
+                self.assertEqual((prefix[i] >> 1) & 3, self.alphabet[(code >> 1) & 1][d])
+                self.assertEqual((final[i] >> 1) & 3, self.family[code][d])
+        self.assertEqual(self.family[4], tuple(range(4)))
+        self.assertEqual(self.family[7], (3, 2, 1, 0))
+
+    def test_length_only_interventions_and_local_substitution(self) -> None:
+        rows = self.evidence["interventions"]
+        self.assertEqual(len(rows), 24)
+        self.assertEqual(sum(r["changed_coordinate"] == 0 for r in rows), 8)
+        for row in rows:
+            first, second = row["codes"]
+            changed = row["changed_coordinate"]
+            self.assertEqual(sum(a != b for a, b in zip(research.states(3)[first], research.states(3)[second])), 1)
+            self.assertNotEqual(research.states(3)[first][changed], research.states(3)[second][changed])
+            d = row["data"]
+            self.assertEqual(2 * row["before"][3] + row["before"][4], self.family[first][d])
+            self.assertEqual(2 * row["after"][3] + row["after"][4], self.family[second][d])
+            self.assertTrue(row["other_program_bytes_unchanged"])
+
+    def test_persistent_program_reused_across_process_death(self) -> None:
+        self.assertEqual(self.evidence["reuse"]["initializer_processes"], 6)
+        self.assertEqual(self.evidence["reuse"]["consumer_processes"], 48)
+        self.assertTrue(self.evidence["reuse"]["data_only_rewrites"])
+        self.assertTrue(self.evidence["reuse"]["program_bytes_preserved"])
+
+    def test_all_physical_remappings_include_slot_boundary(self) -> None:
+        self.assertEqual(self.evidence["temporary_workspace"]["physical_remapping_assignments"], 120)
+        self.assertEqual(self.evidence["temporary_workspace"]["physical_remapping_rows"], 2880)
+        self.assertEqual(self.evidence["temporary_workspace"]["configured_added"], 0)
+
+    def test_recoded_domains_and_program_meanings(self) -> None:
+        for name, mask in (("length", 16), ("instructions", 12)):
+            initial5, target5, _ = research.semantic_length_contract(self.alphabet, False, name)
+            self.assertIn(tuple(sorted(initial5)), research.affine_flat_complements())
+            self.assertEqual(research.permutation_parity(target5, initial5), 1)
+            initial, target, boundary = research.semantic_length_contract(self.alphabet, True, name)
+            self.assertEqual(initial, tuple(i ^ (2 * mask) for i in self.initial))
+            self.assertEqual(target, tuple(i ^ (2 * mask) for i in self.target))
+            self.assertEqual(boundary, tuple(i ^ (2 * mask) for i in self.boundary))
+            word = research.semantic_length_executor(name)
+            actual = research.sample_program(6, word)
+            self.assertEqual(tuple(actual[i] for i in initial), target)
+            sampled = {op: research.sample_program(6, (op,)) for op in set(word)}
+            self.assertIn(7, research.semantic_length_cuts(initial, boundary, word, sampled))
+            self.assertEqual(len(word), 16)
+
+    def test_every_prefix_preserves_24_required_classes_without_reserved_codes(self) -> None:
+        for name, pair in self.evidence["temporary_workspace"]["trajectories"].items():
+            for row in pair["canonical_W0"]:
+                self.assertEqual(row["cardinality"], 24)
+                if name == "native":
+                    self.assertEqual(row["reserved_codes_occupied"], [])
+                if row["next_operation"] is not None:
+                    self.assertTrue(row["next_is_injective"])
+            self.assertEqual(pair["both_old_W"][0]["cardinality"], 48)
+            self.assertEqual(pair["both_old_W"][-1]["cardinality"], 24)
+
+    def test_reserved_extension_is_not_credited_as_total_length_semantics(self) -> None:
+        actual = research.sample_program(6, self.word)
+        natural = research.semantic_length_target(self.alphabet)
+        self.assertTrue(any(actual[i] >> 1 != natural[i >> 1] for i in range(64)))
+        self.assertTrue(all(actual[i] >> 1 == natural[i >> 1] for i in self.initial))
+
+    def test_endpoint_and_boundary_searches_are_separate_and_bounds_honest(self) -> None:
+        for name, row in self.evidence["temporary_workspace"]["searches"].items():
+            self.assertLessEqual(row["lower_bound"], row["upper_bound"])
+            word = tuple((kind, tuple(roles)) for kind, roles in row["word"])
+            actual = research.sample_program(6, word)
+            self.assertEqual(tuple(actual[i] for i in self.initial), self.target)
+            sampled = {op: research.sample_program(6, (op,)) for op in set(word)}
+            if name == "boundary":
+                self.assertTrue(research.semantic_length_cuts(self.initial, self.boundary, word, sampled))
+            for record in row["search"]["checks"]:
+                self.assertEqual(record["boundary_required"], name == "boundary")
+                if record["status"] == "unknown":
+                    self.assertTrue(record["unknown_reason"])
+            if row["minimum"] is not None:
+                self.assertEqual(row["lower_bound"], row["upper_bound"])
+
+    def test_symbolic_shared_boundary_accepts_real_cut_and_rejects_missing_cut(self) -> None:
+        basis = research.sample_basis(2, research.two_bit_basis())
+        initial = tuple(range(4))
+        target = research.compose(basis["toggle(a)"], basis["toggle(b)"])
+        words, record = research.symbolic_program_search(2, initial, target, 2,
+            enumerate_all=False, boundary_target=basis["toggle(a)"], timeout_ms=5000)
+        self.assertTrue(words)
+        self.assertTrue(record["boundary_required"])
+        words, record = research.symbolic_program_search(2, initial, target, 1,
+            enumerate_all=False, boundary_target=basis["toggle(a)"], timeout_ms=5000)
+        self.assertEqual(words, [])
+        self.assertEqual(record["status"], "unsat")
+
+    def test_flat_control_has_same_endpoint_and_no_semantic_cost_advantage(self) -> None:
+        initial, target, _ = research.semantic_length_contract(self.alphabet)
+        self.assertEqual(tuple(self.evidence["flat_control"]["canonical_target"]), target)
+        self.assertEqual(len(initial), 24)
+        self.assertTrue(self.evidence["flat_control"]["boundary_constraint_additional"])
+        self.assertTrue(self.evidence["flat_control"]["no_cost_advantage_claimed"])
+
+    def test_every_previous_evidence_section_is_preserved(self) -> None:
+        import hashlib
+        import json
+        artifact = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))
+        fingerprints = self.evidence["preserved_previous_sections_sha256"]
+        self.assertEqual(len(fingerprints), 12)
+        for key, sha in fingerprints.items():
+            self.assertEqual(hashlib.sha256(json.dumps(artifact[key], sort_keys=True).encode()).hexdigest(), sha)
+
+
 if __name__ == "__main__":
     unittest.main()
