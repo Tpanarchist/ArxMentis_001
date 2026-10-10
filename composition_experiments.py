@@ -10,7 +10,7 @@ import hashlib
 import json
 import tempfile
 from collections.abc import Callable, Sequence
-from itertools import permutations, product
+from itertools import combinations, permutations, product
 from pathlib import Path
 from typing import cast
 
@@ -716,7 +716,7 @@ def symbolic_program_search(width: int, initial: Table, target: Table, length: i
     """
     import time
     import z3
-    if width < 2 or width > 5 or len(initial) != len(target) or length < 0:
+    if width < 2 or width > 6 or len(initial) != len(target) or length < 0:
         raise ValueError("Invalid finite search domain")
     rows = len(initial)
     if injective_prefixes and (len(set(initial)) != rows or len(set(target)) != rows):
@@ -1292,6 +1292,695 @@ def search_factorized_selection() -> dict[str, object]:
     return factorized_selection_experiment(records)
 
 
+def state_space_slack(table: Table, domain: Table) -> dict[str, object]:
+    """Cardinality facts only; unused configurations have representation-relative status."""
+    size = len(table)
+    if len(set(domain)) != len(domain) or any(i < 0 or i >= size for i in domain):
+        raise ValueError("Declare a subset of the full finite domain")
+    if any(i < 0 or i >= size for i in table):
+        raise ValueError("A total table must map into its declared state space")
+    image = len(set(table))
+    restricted = len({table[i] for i in domain})
+    return {'physical_states': size, 'declared_states': len(domain),
+            'unused_states': size-len(domain), 'primitive_image_size': image,
+            'necessary_slack_for_injective_restriction': size-image,
+            'restricted_image_size': restricted, 'injective_on_domain': restricted == len(domain)}
+
+
+def affine_extension(domain: Table, required: Table, width: int) -> dict[str, object]:
+    """Exact GF(2) elimination, including a recoverable inconsistent row sum."""
+    if len(domain) != len(required) or not domain:
+        raise ValueError("Declare nonempty matching input/output rows")
+    pivots: dict[int, tuple[int, int, int]] = {}
+    for row, (state, output) in enumerate(zip(domain, required, strict=True)):
+        feature, rhs, support = state | (1 << width), output, 1 << row
+        while feature:
+            pivot = feature.bit_length()-1
+            if pivot not in pivots:
+                pivots[pivot] = (feature, rhs, support)
+                break
+            old_feature, old_rhs, old_support = pivots[pivot]
+            feature ^= old_feature; rhs ^= old_rhs; support ^= old_support
+        if not feature and rhs:
+            witness = [i for i in range(len(domain)) if support >> i & 1]
+            return {'exists': False, 'contradiction_rows': witness,
+                    'contradiction_input_indices': [domain[i] for i in witness],
+                    'feature_xor': 0, 'output_xor': rhs}
+    coefficients = [0]*(width+1)
+    for pivot in sorted(pivots):
+        feature, rhs, _ = pivots[pivot]
+        for bit in range(pivot):
+            if feature >> bit & 1:
+                rhs ^= coefficients[bit]
+        coefficients[pivot] = rhs
+    table = []
+    for state in range(1 << width):
+        result = coefficients[width]
+        for bit in range(width):
+            if state >> bit & 1:
+                result ^= coefficients[bit]
+        table.append(result)
+    assert all(table[i] == y for i,y in zip(domain,required,strict=True))
+    return {'exists': True, 'coefficients': coefficients, 'table': tuple(table)}
+
+
+def permutation_parity(outputs: Table, target_order: Table) -> int:
+    """Sign relative to two ordered equally sized sets; no semantic equivalence."""
+    if len(set(outputs)) != len(outputs) or set(outputs) != set(target_order):
+        raise ValueError("Parity requires a bijection between the ordered sets")
+    indices = {state:i for i,state in enumerate(target_order)}
+    order = [indices[state] for state in outputs]
+    return sum(order[i] > order[j] for i in range(len(order)) for j in range(i+1,len(order))) % 2
+
+
+def affine_flat_complements() -> tuple[Table, ...]:
+    """All complements of affine three-flats in the five-bit cube, exactly 620."""
+    flats: set[Table] = set()
+    for first, second in combinations(range(1,32),2):
+        for a,b in product((0,1),repeat=2):
+            flats.add(tuple(i for i in range(32) if (i & first).bit_count()%2 == a
+                           and (i & second).bit_count()%2 == b))
+    return tuple(sorted(tuple(i for i in range(32) if i not in flat) for flat in flats))
+
+
+def rank24_orientation_certificate(basis: dict[str, Table]) -> dict[str, object]:
+    """Complete signed set-transition graph; consistent potential proves even loops."""
+    vertices = affine_flat_complements()
+    indices = {value:i for i,value in enumerate(vertices)}
+    adjacency: list[list[tuple[int,int]]] = [[] for _ in vertices]
+    edges: list[tuple[int,str,int,int]] = []
+    for source,domain in enumerate(vertices):
+        for name,table in basis.items():
+            if len(set(table)) < 24:
+                continue
+            outputs = tuple(table[i] for i in domain)
+            if len(set(outputs)) != 24:
+                continue
+            target = tuple(sorted(outputs))
+            if target not in indices:
+                raise AssertionError("Reached-set shape invariant failed")
+            destination = indices[target]
+            sign = permutation_parity(outputs,target)
+            edges.append((source,name,destination,sign))
+            adjacency[source].append((destination,sign))
+            adjacency[destination].append((source,sign))
+    orientation = {0:0}
+    queue = [0]
+    for source in queue:
+        for destination,sign in adjacency[source]:
+            wanted = orientation[source] ^ sign
+            if destination in orientation:
+                if orientation[destination] != wanted:
+                    raise AssertionError("Even-loop invariant contradicted by a primitive edge")
+            else:
+                orientation[destination] = wanted
+                queue.append(destination)
+    assert len(orientation) == len(vertices)
+    return {'vertices': vertices, 'orientation': [orientation[i] for i in range(len(vertices))],
+            'vertex_count': len(vertices), 'edge_count': len(edges),
+            'affine_bijection_edges':sum(len(set(basis[name]))==32 for _,name,_,_ in edges),
+            'plastic_edges':sum(len(set(basis[name]))==24 for _,name,_,_ in edges),
+            'candidate_edges_examined':len(vertices)*sum(len(set(t))>=24 for t in basis.values()),
+            'method':'exhaustive finite signed graph over all affine-three-flat complements',
+            'vertex_cap':620,'timeout_seconds':None,'enumeration_complete':True,
+            'signed_edges_sha256': hashlib.sha256(json.dumps(edges).encode()).hexdigest(),
+            'all_edges_verified': True, 'connected': True,
+            'proof': 'An injective 24-row prefix starts as the complement of an affine three-flat. Affine bijections preserve this shape; every injective plastic step fills its complete image, also such a complement. All admissible primitive edges satisfy sign=orientation(source) XOR orientation(destination). A path returning to its entry domain therefore has even sign.'}
+
+
+def data_behavior_group() -> dict[Table, Program]:
+    x = sample_program(2,(('toggle',(0,)),))
+    swap = sample_program(2,(('xor',(0,1)),('xor',(1,0)),('xor',(0,1))))
+    group,_,saturated = closure({'X':x,'S':swap},10,100)
+    assert saturated and len(group) == 8
+    return group
+
+
+def behavior_extensions(count: int) -> list[dict[int,Table]]:
+    """Every controlled extension; original five selector assignments are fixed."""
+    if count not in (6,7,8):
+        raise ValueError("This experiment admits six, seven or eight behaviors")
+    known = {i:order_family()[i] for i in (0,2,4,6,7)}
+    remaining = tuple(sorted(set(data_behavior_group())-set(known.values())))
+    return [known | dict(zip(codes,maps,strict=True))
+            for codes in combinations((1,3,5),count-5)
+            for maps in permutations(remaining,count-5)]
+
+
+def extension_contract(family: dict[int,Table], workspace: bool = False) -> tuple[Table,Table]:
+    domain = tuple(i for i in range(64 if workspace else 32)
+                   if (i >> (3 if workspace else 2)) in family)
+    required = tuple(((i >> 3)<<3) + 2*family[i >> 3][(i >> 1)&3] if workspace
+                     else ((i >> 2)<<2)+family[i >> 2][i&3] for i in domain)
+    return domain,required
+
+
+def subset_trajectory(width: int, domain: Table, word: Sequence[Operation],
+                      sampled: dict[Operation,Table], reserved: Sequence[int]) -> list[dict[str,object]]:
+    """Full reachable sets, hulls and next-operation ranks, including entry and exit."""
+    current = domain
+    prefix = tuple(range(1 << width))
+    rows = []
+    for step in range(len(word)+1):
+        reachable = tuple(sorted(set(current)))
+        origin = reachable[0]
+        pivots: dict[int,int] = {}
+        for value in reachable:
+            vector = value ^ origin
+            while vector:
+                bit = vector.bit_length()-1
+                if bit in pivots:
+                    vector ^= pivots[bit]
+                else:
+                    pivots[bit] = vector
+                    break
+        codes = sorted({i >> (width-3) for i in reachable})
+        next_table = sampled[word[step]] if step < len(word) else None
+        rows.append({'step':step, 'ordered_outputs':current, 'reachable_set':reachable,
+                     'cardinality':len(reachable), 'prefix_full_image_size':len(set(prefix)),
+                     'inside_prefix_full_image':set(reachable).issubset(set(prefix)),
+                     'selector_codes':codes, 'reserved_codes_occupied':sorted(set(codes)&set(reserved)),
+                     'fixed_bit_values': [next(iter(values)) if len(values)==1 else None
+                         for bit in range(width-1,-1,-1)
+                         for values in ({(i >> bit)&1 for i in reachable},)],
+                     'affine_hull_size':1 << len(pivots),
+                     'next_operation':word[step] if step < len(word) else None,
+                     'next_restricted_image_size':len({next_table[i] for i in reachable}) if next_table else None,
+                     'next_is_injective':len({next_table[i] for i in reachable})==len(reachable) if next_table else None,
+                     'next_fills_global_image':set(next_table[i] for i in reachable)==set(next_table) if next_table else None})
+        if next_table is not None:
+            current = tuple(next_table[i] for i in current)
+            prefix = compose(prefix,next_table)
+    return rows
+
+
+def derived_controlled_toggle(first: int, second: int, target: int, workspace: int = 5) -> tuple[Operation,...]:
+    """Recoverable five-call support with W=0 at entry/exit; no runtime primitive."""
+    return (('xor',(first,workspace)),('plastic',(first,workspace,second)),
+            ('xor',(workspace,target)),('plastic',(first,workspace,second)),('xor',(first,workspace)))
+
+
+def workspace_completion_executor() -> tuple[Operation,...]:
+    """All eight behaviors for the fixed completion 001:Y,011:SXY,101:XY."""
+    clear: tuple[Operation,...] = (('evaluate',(0,1,5)),('xor',(0,5)),('xor',(1,5)))
+    return (*clear,('xor',(3,4)),*derived_controlled_toggle(1,4,3),('xor',(3,4)),
+            ('xor',(0,3)),*derived_controlled_toggle(0,1,3),*derived_controlled_toggle(1,2,3),
+            ('xor',(2,4)),*derived_controlled_toggle(0,1,4))
+
+
+def slack_workspace_experiment() -> dict[str,object]:
+    """Finite geometric/parity audit, exact transports, and temporary workspace upper bounds."""
+    import time
+    started = time.perf_counter()
+    operations = role_complete_basis(5)
+    raw = sample_basis(5,operations)
+    basis,aliases = canonical_basis(raw)
+    sampled = {operations[name]:table for name,table in raw.items()}
+    certificate = rank24_orientation_certificate(basis)
+    group = data_behavior_group()
+    b2 = sample_basis(2,two_bit_basis())
+    group_rows = [{'table':table,'shortest_X_S_word':word,
+                   'shortest_existing_two_bit_words':shortest_solutions(b2,lambda t:t==table,6),
+                   'parity':permutation_parity(table,tuple(range(4)))} for table,word in group.items()]
+    labels: dict[Table,str] = {(0,1,2,3):'I',(2,3,0,1):'X',(0,2,1,3):'S',
+              (1,3,0,2):'S after X',(2,0,3,1):'X after S',
+              (1,0,3,2):'Y = toggle B',(3,2,1,0):'XY = complement both',
+              (3,1,2,0):'SXY = swap and complement both'}
+    for row in group_rows:
+        row['name'] = labels[cast(Table,row['table'])]
+    group_order = tuple(group)
+    group_relations = [[group_order.index(compose(a,b)) for b in group_order] for a in group_order]
+    # Search only the three selector coordinates, retaining exact support for transports.
+    control_ops = role_complete_basis(3)
+    control_basis,_ = canonical_basis(sample_basis(3,control_ops))
+    control_basis = {n:t for n,t in control_basis.items() if len(set(t)) >= 6}
+    transport_words: dict[tuple[int,str],tuple[Operation,...]] = {}
+    transport_records = []
+    for code in (1,3,5):
+        for direction in ('to_3','from_3'):
+            entry = tuple(sorted((0,2,code,4,6,7))) if direction=='to_3' else (0,2,3,4,6,7)
+            goal = tuple(3 if i==code else i for i in entry) if direction=='to_3' else tuple(code if i==3 else i for i in entry)
+            layers,counts = restricted_frontiers(control_basis,entry,20,25_000)
+            hits = [(depth,layer) for depth,layer in enumerate(layers) if bytes(goal) in layer]
+            assert hits and not layers[-1] and sum(counts)==20_160
+            depth = hits[0][0]
+            names = frontier_witness(layers,bytes(goal),depth)
+            word = tuple(control_ops[name] for name in names)
+            transport_words[code,direction] = word
+            transport_records.append({'code':code,'direction':direction,'domain':entry,'required':goal,
+                'method':'complete BFS of injective six-row maps on the three-bit selector cube',
+                'basis':list(control_basis),'basis_tables':15,'max_length':20,'table_cap':25_000,
+                'timeout_seconds':None,'new_at_length':counts,'closure_saturated':True,
+                'minimum_transport_length':depth,'word':word,'witness_count':1,
+                'witness_enumeration_complete':False})
+    cases: dict[str,list[dict[str,object]]] = {}
+    live_five = live_six = 0
+    for count in (6,7,8):
+        rows = []
+        for family in behavior_extensions(count):
+            domain,required = extension_contract(family)
+            affine = affine_extension(domain,required,5)
+            assert not affine['exists']
+            added = {code:table for code,table in family.items() if code in (1,3,5)}
+            row: dict[str,object] = {'family':family,'added':added,'domain':domain,'required':required,
+                'unused_states':32-len(domain),'reserved_codes':sorted(set(range(8))-set(family)),
+                'affine_extension':affine,'target_parity':permutation_parity(required,domain)}
+            if count==6:
+                row['initial_injective_nonaffine_calls'] = [n for n,t in basis.items()
+                    if not is_affine(t) and len({t[i] for i in domain})==24]
+                code = next(iter(added))
+                if row['target_parity']:
+                    row.update(status='UNSAT proven',proof='rank-24 reached-set orientation invariant: target is odd',word=None)
+                else:
+                    word = transport_words[code,'to_3'] + order_executor() + transport_words[code,'from_3']
+                    actual = sample_program(5,word)
+                    assert tuple(actual[i] for i in domain)==required
+                    trajectory = subset_trajectory(5,domain,word,sampled,cast(list[int],row['reserved_codes']))
+                    assert all(x['cardinality']==24 for x in trajectory)
+                    assert all(x['next_fills_global_image'] for x in trajectory
+                               if x['next_operation'] and cast(Operation,x['next_operation'])[0]=='plastic')
+                    row.update(status='SAT witness found',word=word,word_length=len(word),
+                               minimum_length=None,proved_lower_bound=9,exact_shortest_count=None,
+                               trajectory=trajectory)
+                    with tempfile.TemporaryDirectory() as directory:
+                        paths = tuple(Path(directory)/str(i) for i in range(5))
+                        for initial,out in zip(domain,required,strict=True):
+                            assert execute(states(5)[initial],word,paths)==states(5)[out]
+                            live_five += 1
+            else:
+                row.update(status='UNSAT proven',proof='required rank exceeds every nonbijective primitive image; remaining affine bijections have no affine extension',word=None)
+            if count==8:
+                row['total_properties'] = table_properties(required)
+            rows.append(row)
+        cases[str(count)] = rows
+    # Complete finite selector permutations using DERIVED gates with explicit runtime support.
+    transport_support: dict[str,tuple[Operation,...]] = {}
+    transport_tables: dict[str,Table] = {}
+    for name,op in role_complete_basis(3).items():
+        if op[0] in ('toggle','xor'):
+            transport_support[name] = (op,)
+            transport_tables[name] = sample_program(3,(op,))
+    for target in range(3):
+        drivers = tuple(i for i in range(3) if i != target)
+        name = f'derived-controlled-toggle{drivers,target}'
+        transport_support[name] = derived_controlled_toggle(drivers[0],drivers[1],target)
+        transport_tables[name] = tuple(i ^ (1 << (2-target)) if all(i >> (2-d)&1 for d in drivers) else i for i in range(8))
+    selector_group,selector_counts,saturated = closure(transport_tables,12,50_000)
+    assert saturated and len(selector_group)==40_320
+    base = {code:order_family()[code] for code in (0,2,4,6,7)} | {
+        1:(1,0,3,2),3:(3,1,2,0),5:(3,2,1,0)}
+    core = workspace_completion_executor()
+    workspace_words = []
+    sampled_six: dict[Operation,Table] = {}
+    for family in behavior_extensions(8):
+        phi = tuple(next(j for j in range(8) if family[j]==base[i]) for i in range(8))
+        inverse = tuple(phi.index(i) for i in range(8))
+        before = tuple(op for name in selector_group[inverse] for op in transport_support[name])
+        after = tuple(op for name in selector_group[phi] for op in transport_support[name])
+        # One internal normalization, then derived transports and the unchanged core.
+        word = core[:3] + before + core[3:] + after
+        for op in word:
+            if op not in sampled_six:
+                sampled_six[op] = sample_program(6,(op,))
+        domain,required = extension_contract(family,True)
+        actual = sample_program(6,word)
+        assert actual==required
+        canonical = tuple(i for i in domain if i&1==0)
+        trajectory = subset_trajectory(6,canonical,word,sampled_six,())
+        assert all(x['cardinality']==32 for x in trajectory)
+        full_old_w = subset_trajectory(6,domain,word,sampled_six,())
+        assert full_old_w[0]['cardinality']==64 and all(x['cardinality']==32 for x in full_old_w[1:])
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory)/str(i) for i in range(6))
+            for i,out in zip(domain,required,strict=True):
+                assert execute(states(6)[i],word,paths)==states(6)[out]
+                live_six += 1
+        workspace_words.append({'family':family,'selector_permutation':phi,'inverse':inverse,
+            'word':word,'word_length':len(word),'minimum_length':None,'domain':domain,'required':required,
+            'canonical_W0_trajectory':trajectory,'both_old_W_values_trajectory':full_old_w,
+            'actual_full_table':actual,'temporary_workspace_only':True,'final_W':0})
+    seven_workspace = []
+    for family in behavior_extensions(7):
+        parent = next(row for row in workspace_words if all(cast(dict[int,Table],row['family'])[code]==table for code,table in family.items()))
+        domain,required = extension_contract(family,True)
+        actual = cast(Table,parent['actual_full_table'])
+        assert tuple(actual[i] for i in domain)==required
+        canonical = tuple(i for i in domain if not i&1)
+        seven_workspace.append({'family':family,'parent_completion':parent['family'],
+            'domain':domain,'required':required,'word_length':parent['word_length'],
+            'proof':'restriction of a verified complete 64-input executor; each seven-code case uniquely determines its missing completion',
+            'trajectory':subset_trajectory(6,canonical,cast(tuple[Operation,...],parent['word']),sampled_six,sorted(set(range(8))-set(family)))})
+    root = Path(__file__).resolve().parent
+    previous = json.loads((root/'composition_results.json').read_text(encoding='utf-8'))
+    return {'baseline_commit':'5e062ae','finite_bound_proof':'If F is injective on D, |D|=|F(D)| <= |Im(F)|=R. Hence N-|D| >= N-R. This is necessary, not sufficient.',
+        'primitive_slack':[{'name':name,'operation':operations[name],'aliases':aliases[name],
+                           **state_space_slack(table,tuple(range(32)))} for name,table in basis.items()],
+        'eight_behavior_group':group_rows,'group_composition_table':group_relations,'group_closure_X_S':{'max_length':10,'table_cap':100,'saturated':True,'size':8},
+        'rank24_certificate':certificate,'selector_only_transports':transport_records,
+        'extensions':cases,'five_bit_live_rows':live_five,
+        'workspace':{'configured_runtime_carriers_added':0,'temporary_research_carriers':1,
+            'physical_states':64,'core_word':core,'core_length':len(core),
+            'clear_W_support':core[:3],'derived_controlled_toggle_support':derived_controlled_toggle(0,1,3),
+            'selector_transport_group':{'size':len(selector_group),'new_at_length':selector_counts,'saturated':True,
+                'max_length':12,'table_cap':50_000,'timeout_seconds':None,
+                'basis_tables':transport_tables,'basis_runtime_support':transport_support,
+                'method':'complete BFS of selector permutation tables, using explicitly derived five-call gates; not a new substrate basis',
+                'minimum_runtime_word_lengths_claimed':False,'witness_enumeration_complete':False},
+            'eight_completions':workspace_words,'all_eighteen_seven_extensions':seven_workspace,
+            'live_rows':live_six,'workspace_state_comparison':[
+                {'behaviors':k,'five_bit_unused_states':32-4*k,'six_bit_canonical_unused_states':64-4*k,
+                 'canonical_distinctions':4*k,'old_W_admissible_input_states':8*k} for k in (5,6,7,8)]},
+        'six_status_counts':{'SAT witness found':sum(row['status']=='SAT witness found' for row in cases['6']),
+                             'UNSAT proven':sum(row['status']=='UNSAT proven' for row in cases['6']),
+                             'bounded unresolved':0},
+        'preserved_previous_sections_sha256':{key:hashlib.sha256(json.dumps(value,sort_keys=True).encode()).hexdigest()
+                                             for key,value in previous.items() if key not in ('scope','slack_workspace')},
+        'external_contributions':{'carrier':'five configured capacities, OS files; sixth path is temporary research-only',
+            'law':'unchanged runtime primitives; derived gates retain complete support',
+            'representation':'harness declares meaningful domains, reserves codes, and declares old W expendable',
+            'sequencing':'external finite enumeration and fixed Python call sequences, no endogenous discovery or instruction pointer',
+            'environment':'harness initializes values and chooses physical paths and process timing',
+            'evaluator':'complete supplied targets, injectivity, exact selector/data/W outputs, parity and linear-algebra checks'},
+        'earned':'Within these controlled extensions, three six-behavior encodings reach the eight-state slack bound, six fail by parity; all seven/eight encodings fail without extra capacity and are restored by one expendable research bit.',
+        'unearned':['universal slack sufficiency','all-length minimum runtime words','equal cost of physical workspace and reserved codes','endogenous control','stored sequences'],
+        'seconds':round(time.perf_counter()-started,3)}
+
+
+def stored_instruction_target(recoded: bool = False) -> Table:
+    """One common X/R alphabet, complete I,A,B,W target; old W is expendable."""
+    x = sample_program(2, (("toggle", (0,)),))
+    swap = sample_program(2, (("xor", (0, 1)), ("xor", (1, 0)), ("xor", (0, 1))))
+    alphabet = (x, compose(x, swap))
+    return tuple((i >> 3) * 8 + 2 * alphabet[(i >> 3) ^ int(recoded)][(i >> 1) & 3]
+                 for i in range(16))
+
+
+def stored_sequence_target(workspace: bool = True, recoded: bool = False) -> Table:
+    """Derive the target from independent slot meanings, slot zero first."""
+    one = stored_instruction_target(recoded)
+    alphabet = tuple(tuple((one[8 * instruction + 2 * data] >> 1) & 3
+                           for data in range(4)) for instruction in (0, 1))
+    width = 5 if workspace else 4
+    result = []
+    for state in states(width):
+        p0, p1, a, b = state[:4]
+        data = alphabet[p1][alphabet[p0][2 * a + b]]
+        result.append(((2 * p0 + p1) * 4 + data) * (2 if workspace else 1))
+    return tuple(result)
+
+
+def stored_instruction_executor(recoded: bool = False) -> tuple[Operation, ...]:
+    """Minimum seven-call four-role decoder; unchanged runtime support."""
+    swap = recoded_swap_workspace_program() if recoded else selected_swap_workspace_program()
+    return (("toggle", (1,)),) + swap
+
+
+def stored_slot_executor(slot: int, recoded: bool = False) -> tuple[Operation, ...]:
+    """One schema transported to P0 or P1; other slot is untouched."""
+    if slot not in (0, 1):
+        raise ValueError("This fixed experiment has exactly two slots")
+    roles = (slot, 2, 3, 4)
+    return tuple((kind, tuple(roles[i] for i in indices))
+                 for kind, indices in stored_instruction_executor(recoded))
+
+
+def stored_sequence_executor(recoded: bool = False) -> tuple[Operation, ...]:
+    """External fixed two-position grammar, no state-dependent harness branch."""
+    return stored_slot_executor(0, recoded) + stored_slot_executor(1, recoded)
+
+
+def sequence_trajectory(width: int, domain: Table, word: Sequence[Operation],
+                        sampled: dict[Operation, Table]) -> list[dict[str, object]]:
+    """The earlier trajectory format plus correct one/two-position program roles."""
+    rows = subset_trajectory(width, domain, word, sampled, ())
+    count = 2 if width == 5 else 1
+    shift = width - count
+    for stage in rows:
+        reached = cast(Table, stage["reachable_set"])
+        outputs = cast(Table, stage["ordered_outputs"])
+        following = cast(Operation | None, stage["next_operation"])
+        stage["program_coordinates"] = list(range(count))
+        stage["program_codes"] = sorted({i >> shift for i in reached})
+        stage["selector_codes"] = stage["program_codes"]  # Here the selectors are the one/two instruction positions.
+        stage["program_values_preserved"] = all(a >> shift == b >> shift
+                                                   for a, b in zip(domain, outputs, strict=True))
+        stage["W_fixed_value"] = cast(list[int | None], stage["fixed_bit_values"])[-1]
+        stage["next_globally_noninjective"] = (len(set(sampled[following])) < 1 << width
+                                                if following is not None else None)
+    return rows
+
+
+def search_stored_sequence() -> dict[str, object]:
+    """Bounded external searches, with clean-W relaxation only for lower bounds."""
+    import time
+    started = time.perf_counter()
+    operations = role_complete_basis(4)
+    basis, _ = canonical_basis(sample_basis(4, operations))
+    initial = tuple(range(0, 16, 2))
+    one: dict[str, object] = {}
+    for recoded in (False, True):
+        target = stored_instruction_target(recoded)
+        words, evidence = meet_shortest_programs(basis, initial,
+                                                tuple(target[i] for i in initial), 3, 3, 500_000)
+        if words:
+            raise AssertionError("The retained seven-call decoder lower bound was contradicted")
+        one["recoded" if recoded else "native"] = {
+            "initial": initial, "required": tuple(target[i] for i in initial),
+            "basis": basis, "evidence": evidence, "timeout_seconds": None,
+            "proved_absent_through": 6, "witness_enumeration_complete": True,
+            "scope": "complete clean-W0 relaxation; excludes <=6 calls for arbitrary old W too"}
+    target = stored_sequence_target()
+    checks = []
+    found: list[tuple[Operation, ...]] = []
+    for length in range(8):
+        timeout = 15_000 if length < 6 else 45_000 if length == 6 else 90_000
+        words, evidence = symbolic_program_search(5, tuple(range(32)), target, length,
+            timeout_ms=timeout, wall_seconds=timeout / 1000 + 5, enumerate_all=False)
+        checks.append(evidence)
+        found.extend(words)
+        if words:
+            break
+    relaxed = []
+    for length in (6, 7):
+        if any(e["length"] == length and e["status"] == "unsat" for e in checks):
+            continue
+        if found and min(map(len, found)) <= length:
+            break
+        clean = tuple(range(0, 32, 2))
+        words, evidence = symbolic_program_search(5, clean, tuple(target[i] for i in clean), length,
+            timeout_ms=90_000, wall_seconds=95, enumerate_all=False,
+            incremental_rows=True, injective_prefixes=True)
+        relaxed.append({"words": words, "evidence": evidence})
+        for word in words:
+            if sample_program(5, word) == target:
+                found.append(word)
+    return {"one_slot": one, "global": {"target": target, "records": checks, "words": found},
+            "relaxed": {"initial": tuple(range(0, 32, 2)),
+                        "target": tuple(target[i] for i in range(0, 32, 2)), "records": relaxed},
+            "seconds": round(time.perf_counter() - started, 3)}
+
+
+def stored_sequence_experiment(searches: dict[str, object]) -> dict[str, object]:
+    """Ground modular sequence evidence separately from a flat total lookup."""
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parent
+    previous = json.loads((root / "composition_results.json").read_text(encoding="utf-8"))
+    alphabet = ((2, 3, 0, 1), (1, 3, 0, 2))
+    x = sample_program(2, (("toggle", (0,)),))
+    swap = sample_program(2, (("xor", (0, 1)), ("xor", (1, 0)), ("xor", (0, 1))))
+    assert x == alphabet[0] and compose(x, swap) == alphabet[1]
+    family = {2 * p0 + p1: compose(alphabet[p0], alphabet[p1]) for p0, p1 in states(2)}
+    assert len(set(family.values())) == 4
+    one_target = stored_instruction_target()
+    target = stored_sequence_target()
+    modular = stored_sequence_executor()
+    global_data = cast(dict[str, object], searches["global"])
+    candidates = [tuple((kind, tuple(roles)) for kind, roles in word)
+                  for word in cast(list[tuple[Operation, ...]], global_data["words"])]
+    roles = (1, 2, 3, 4)
+    constructed = (("xor", (0, 1)),) + tuple((kind, tuple(roles[i] for i in indices))
+                    for kind, indices in selected_swap_workspace_program()) + (
+                    ("xor", (0, 1)), ("xor", (0, 2)), ("xor", (0, 3)))
+    assert sample_program(5, constructed) == target
+    candidates += [constructed, modular]
+    shortest_found = min(candidates, key=lambda word: (len(word), word))
+    assert sample_program(5, shortest_found) == target
+    checks = cast(list[dict[str, object]], global_data["records"])
+    relaxed = cast(dict[str, object], searches["relaxed"])
+    negative = {cast(int, e["length"]) for e in checks if e["status"] == "unsat"}
+    for row in cast(list[dict[str, object]], relaxed["records"]):
+        evidence = cast(dict[str, object], row["evidence"])
+        if evidence["status"] == "unsat":
+            negative.add(cast(int, evidence["length"]))
+    lower = 0
+    while lower in negative:
+        lower += 1
+    minimum = len(shortest_found) if lower == len(shortest_found) else None
+    sampled: dict[Operation, Table] = {}
+    recoded_target = stored_sequence_target(recoded=True)
+    recoded_global = shortest_found + (("toggle", (2,)), ("toggle", (3,)))
+    assert sample_program(5, recoded_global) == recoded_target
+    words = {"modular": modular, "global": shortest_found,
+             "recoded_modular": stored_sequence_executor(True), "recoded_global": recoded_global}
+    for word in words.values():
+        for op in word:
+            if op not in sampled:
+                sampled[op] = sample_program(5, (op,))
+    trajectories = {name: {
+        "canonical_W0": sequence_trajectory(5, tuple(range(0, 32, 2)), word, sampled),
+        "both_old_W": sequence_trajectory(5, tuple(range(32)), word, sampled)}
+        for name, word in words.items()}
+    for traces in trajectories.values():
+        assert all(row["cardinality"] == 16 for row in traces["canonical_W0"])
+    boundary_rows = []
+    for initial in states(5):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            mid = execute(initial, stored_slot_executor(0), paths)
+            # Continue on existing files without resetting program, data or W.
+            for op in stored_slot_executor(1):
+                apply_operation(op, paths)
+            final = tuple(runtime.read_state(path) for path in paths)
+        p0, p1, a, b, _ = initial
+        expected_mid = alphabet[p0][2 * a + b]
+        assert mid == (p0, p1, expected_mid >> 1, expected_mid & 1, 0)
+        assert final == states(5)[target[states(5).index(initial)]]
+        boundary_rows.append({"initial": initial, "after_slot0": mid, "after_slot1": final})
+    remapping_rows = 0
+    with tempfile.TemporaryDirectory() as directory:
+        physical = tuple(Path(directory) / name for name in (
+            ".arxmentis-state", ".arxmentis-state-2", ".arxmentis-memory",
+            ".arxmentis-policy", ".arxmentis-policy-1"))
+        for paths in permutations(physical):
+            for i, initial in enumerate(states(5)):
+                assert execute(initial, modular, paths) == states(5)[target[i]]
+                remapping_rows += 1
+    substitutions = []
+    for changed in (0, 1):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            runtime.write_state(0, paths[0]); runtime.write_state(1, paths[1])
+            before_bytes = tuple(path.read_bytes() for path in paths[:2])
+            results = []
+            for p in ((0, 1), (1, 1) if changed == 0 else (0, 0)):
+                if p != (0, 1):
+                    runtime.write_state(p[changed], paths[changed])
+                    assert paths[1 - changed].read_bytes() == before_bytes[1 - changed]
+                for a, b in states(2):
+                    runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                    for op in modular:
+                        apply_operation(op, paths)
+                    output = tuple(runtime.read_state(path) for path in paths)
+                    expected = family[2 * p[0] + p[1]][2 * a + b]
+                    assert output == (*p, expected >> 1, expected & 1, 0)
+                    results.append({"program": p, "data": (a, b), "output": output})
+            substitutions.append({"changed_slot": changed, "results": results,
+                                  "other_slot_bytes_preserved": True})
+    reuse = 0
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(5))
+        for p0, p1 in states(2):
+            runtime.write_state(p0, paths[0]); runtime.write_state(p1, paths[1])
+            runtime.write_state(1, paths[4])
+            saved = tuple(path.read_bytes() for path in paths[:2])
+            for a, b in states(2) * 2:
+                runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                for op in modular:
+                    apply_operation(op, paths)
+                data = family[2 * p0 + p1][2 * a + b]
+                assert tuple(runtime.read_state(path) for path in paths) == (p0, p1, data >> 1, data & 1, 0)
+                assert tuple(path.read_bytes() for path in paths[:2]) == saved
+                reuse += 1
+    initialize = "from pathlib import Path; import sys,arxmentis as a; a.write_state(int(sys.argv[1]),Path(sys.argv[3])); a.write_state(int(sys.argv[2]),Path(sys.argv[4]))"
+    consume = "from pathlib import Path; import sys,composition_experiments as r; p=tuple(Path(x) for x in sys.argv[1:]); [r.apply_operation(op,p) for op in r.stored_sequence_executor()]"
+    initializers = consumers = 0
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(5))
+        for p0, p1 in states(2):
+            subprocess.run([sys.executable, "-B", "-c", initialize, str(p0), str(p1),
+                            str(paths[0]), str(paths[1])], cwd=root, check=True, capture_output=True)
+            initializers += 1
+            runtime.write_state(1, paths[4])
+            saved = tuple(path.read_bytes() for path in paths[:2])
+            for a, b in states(2) * 2:
+                runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                subprocess.run([sys.executable, "-B", "-c", consume, *(str(path) for path in paths)],
+                               cwd=root, check=True, capture_output=True)
+                data = family[2 * p0 + p1][2 * a + b]
+                assert tuple(runtime.read_state(path) for path in paths) == (p0, p1, data >> 1, data & 1, 0)
+                assert tuple(path.read_bytes() for path in paths[:2]) == saved
+                consumers += 1
+    one_sampled = {op: sample_program(4, (op,))
+                   for op in set(stored_instruction_executor() + stored_instruction_executor(True))}
+    one_traces = {str(recoded): sequence_trajectory(4, tuple(range(0, 16, 2)),
+                  stored_instruction_executor(recoded), one_sampled) for recoded in (False, True)}
+    no_workspace = {}
+    for width, wanted in ((3, tuple((i >> 2) * 4 + alphabet[i >> 2][i & 3] for i in range(8))),
+                          (4, stored_sequence_target(False))):
+        raw = sample_basis(width, role_complete_basis(width))
+        assert len(set(wanted)) == 1 << width and not is_affine(wanted)
+        assert all(is_affine(t) for t in raw.values() if len(set(t)) == 1 << width)
+        no_workspace[str(width)] = {"target": wanted, "properties": table_properties(wanted),
+            "proof": "nonaffine total bijection; every bijective primitive is affine and any rank loss is irreversible"}
+    # Position-role transport and a content edit are separately represented.
+    sigma = (1, 0, 2, 3, 4)
+    reordered = stored_slot_executor(1) + stored_slot_executor(0)
+    reversed_table = sample_program(5, reordered)
+    assert all(reversed_table[i] == ((i >> 3) * 8 + 2 * family[2 * ((i >> 3) & 1) + (i >> 4)][(i >> 1) & 3])
+               for i in range(32))
+    return {"alphabet": {"0": x, "1": compose(x, swap), "names": ["X", "R = S after X"]},
+        "word_compositions": family, "four_distinct": True, "one_slot_target": one_target,
+        "one_slot": {"roles": ["I", "A", "B", "W"], "native_word": stored_instruction_executor(),
+            "recoded_word": stored_instruction_executor(True), "minimum_calls": 7,
+            "recoded_minimum_calls": 7, "arbitrary_old_W": True, "final_W": 0,
+            "zero_initialization_required": False, "search": searches["one_slot"], "trajectories": one_traces},
+        "two_slot_target": target, "modular_word": modular, "modular_calls": len(modular),
+        "global_word": shortest_found, "global_calls": len(shortest_found),
+        "global_minimum_calls": minimum, "global_proved_lower_bound": lower,
+        "global_search": global_data, "global_relaxation_search": relaxed,
+        "global_shortest_word_count": None, "constructed_ten_call_upper": constructed,
+        "properties": table_properties(target), "slot_boundary_rows": boundary_rows,
+        "slot_schema_transport": {"roles": [[0, 2, 3, 4], [1, 2, 3, 4]],
+            "same_schema": True, "other_slot_untouched": True, "full_cube_rows_each": 32},
+        "physical_remapping": {"assignments": 120, "rows": remapping_rows, "word": "modular"},
+        "local_substitutions": substitutions,
+        "reuse": {"in_process_executions": reuse, "program_written_once_per_word": True,
+            "data_only_rewrites_between_runs": True, "separate_initializers": initializers,
+            "separate_consumers": consumers, "program_bytes_preserved": True},
+        "recoding": {"instruction_mask_one_slot": 8, "instruction_mask_two_slot": 24,
+            "one_slot_target": stored_instruction_target(True), "two_slot_target": recoded_target,
+            "modular_word": words["recoded_modular"], "global_word": recoded_global,
+            "global_calls_upper_bound": len(recoded_global), "global_minimum_calls": None,
+            "same_literal_syntax_required": False},
+        "position_mapping": {"carrier_role_permutation": sigma,
+            "transport": "remap state and executor together; same logical word and data result",
+            "contents_edit": "fixed role map, exchange the two stored values; mixed words change order",
+            "consume_reversed_word": reordered, "consume_reversed_table": reversed_table,
+            "distinction": "reversed consumption and swapped contents agree on data, but preserve different final program bytes"},
+        "flat_control": {"id_table": family, "target": target, "exact_same_full_target": True,
+            "global_search_shared_by_exact_table_identity": True, "global_calls": len(shortest_found),
+            "minimum_calls": minimum, "proved_lower_bound": lower, "dedicated_workspace_bits": 1,
+            "properties": table_properties(target), "trajectory": trajectories["global"],
+            "local_edit_data_effects_identical": True,
+            "interpretation": "no execution-cost or extensional edit advantage over identically assigned flat IDs; modular factorization is independent evidence"},
+        "trajectories": trajectories, "no_workspace_all_length_proofs": no_workspace,
+        "minimum_dedicated_workspace_bits": 1, "configured_carriers_added": 0,
+        "external_grammar": "Exactly two positions, common 0:X/1:R alphabet, consume P0 then P1; retained fixed call words supplied by Python, no endogenous invocation",
+        "external_contributions": {"carrier": "five existing capacities and OS persistence",
+            "law": "existing hard-coded equations; all effective support recoverable",
+            "representation": "common instruction alphabet, two ordered positions, data roles, old W expendable",
+            "sequencing": "external search, retained words, fixed two-slot scheduling",
+            "environment": "harness initialization, data rewrites, physical paths and process lifetimes",
+            "evaluator": "complete composition-derived target, slot-boundary semantics, exact program/W restoration"},
+        "earned": "Two persistent positions independently store symbols from one common two-instruction alphabet; an externally supplied fixed executor consumes them in order with repetition, local substitution and reuse.",
+        "unearned": ["arbitrary alphabets", "variable length", "program counter", "branches", "loops", "jumps",
+            "arbitrary repetition counts", "endogenous program construction", "autonomous invocation",
+            "general interpreter", "self modification", "intrinsic sequence semantics from the full target alone"],
+        "preserved_previous_sections_sha256": {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+            for key, value in previous.items() if key not in ("scope", "stored_sequence")}}
+
+
 def run_experiments() -> dict[str, object]:
     b2 = sample_basis(2, two_bit_basis())
     b3_ops = three_bit_basis()
@@ -1415,7 +2104,11 @@ def run_experiments() -> dict[str, object]:
     retained_factorized = (json.loads(result_path.read_text(encoding="utf-8")).get("factorized_selection")
                            if result_path.exists() else None)
     return {
+        "stored_sequence": (json.loads(result_path.read_text(encoding="utf-8")).get("stored_sequence")
+                            if result_path.exists() else None),
         "factorized_selection": retained_factorized,
+        "slack_workspace": (json.loads(result_path.read_text(encoding="utf-8")).get("slack_workspace")
+                            if result_path.exists() else None),
         "persistent_order": (json.loads(result_path.read_text(encoding="utf-8")).get("persistent_order")
                              if result_path.exists() else None),
         "mechanism_reification": mechanism_reification_experiment(c3),
@@ -1480,12 +2173,20 @@ def main() -> None:
                         help="Recompute the bounded expensive two-selector searches; ordinary runs retain their certificate")
     parser.add_argument("--order-search", action="store_true",
                         help="Recompute bounded partial-domain order searches and runtime replay")
+    parser.add_argument("--slack-experiment", action="store_true",
+                        help="Recompute the finite slack/parity classification and temporary workspace witnesses")
+    parser.add_argument("--sequence-search", action="store_true",
+                        help="Recompute bounded fixed-length stored-sequence searches and runtime evidence")
     args = parser.parse_args()
     result = run_experiments()
     if args.selector_search:
         result['factorized_selection'] = search_factorized_selection()
     if args.order_search:
         result['persistent_order'] = search_persistent_order()
+    if args.slack_experiment:
+        result['slack_workspace'] = slack_workspace_experiment()
+    if args.sequence_search:
+        result["stored_sequence"] = stored_sequence_experiment(search_stored_sequence())
     rendered = json.dumps(result, indent=2) + "\n"
     if args.output is None:
         print(rendered, end="")

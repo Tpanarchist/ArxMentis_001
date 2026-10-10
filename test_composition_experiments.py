@@ -740,5 +740,415 @@ class PersistentOrderTests(unittest.TestCase):
         self.assertEqual(self.evidence['runtime_replay']['remapping_rows'],2400)
 
 
+class SlackWorkspaceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.evidence = json.loads(Path('composition_results.json').read_text(encoding='utf-8'))['slack_workspace']
+        cls.calls = research.role_complete_basis(5)
+        cls.raw = research.sample_basis(5,cls.calls)
+        cls.basis,_ = research.canonical_basis(cls.raw)
+
+    def test_finite_bound_exhaustive_small_functions_and_insufficient_cardinality(self) -> None:
+        from itertools import combinations
+        for size in range(1,5):
+            for table in product(range(size),repeat=size):
+                for k in range(size+1):
+                    for domain in combinations(range(size),k):
+                        m = research.state_space_slack(table,domain)
+                        if m['injective_on_domain']:
+                            self.assertLessEqual(k,len(set(table)))
+                            self.assertGreaterEqual(size-k,size-len(set(table)))
+        m = research.state_space_slack((0,0,1,1),(0,1))
+        self.assertEqual(m['unused_states'],m['necessary_slack_for_injective_restriction'])
+        self.assertFalse(m['injective_on_domain'])
+
+    def test_every_runtime_primitive_image_and_slack_requirement(self) -> None:
+        expected = {'toggle':(32,0),'xor':(32,0),'memory':(32,0),
+                    'copy':(16,16),'evaluate':(16,16),'plastic':(24,8)}
+        for name,op in self.calls.items():
+            m = research.state_space_slack(self.raw[name],tuple(range(32)))
+            self.assertEqual((m['primitive_image_size'],m['necessary_slack_for_injective_restriction']),expected[op[0]])
+        self.assertEqual(len(self.evidence['primitive_slack']),175)
+
+    def test_eight_element_group_matches_independent_bit_maps_and_relations(self) -> None:
+        group = research.data_behavior_group()
+        independent = {tuple(((i&1)<<1 | (i>>1)) ^ offset if swapped else i ^ offset for i in range(4))
+                       for swapped in (False,True) for offset in range(4)}
+        self.assertEqual(set(group),independent)
+        self.assertTrue(all(research.compose(a,b) in group for a in group for b in group))
+        x,s = (2,3,0,1),(0,2,1,3)
+        self.assertEqual(research.compose(x,x),tuple(range(4)))
+        self.assertEqual(research.compose(s,s),tuple(range(4)))
+        xs = research.compose(x,s)
+        self.assertEqual(research.compose(research.compose(xs,xs),research.compose(xs,xs)),tuple(range(4)))
+
+    def test_group_shortest_existing_support_is_replayed(self) -> None:
+        basis = research.two_bit_basis()
+        for row in self.evidence['eight_behavior_group']:
+            for names in row['shortest_existing_two_bit_words']:
+                self.assertEqual(research.sample_program(2,tuple(basis[n] for n in names)),tuple(row['table']))
+
+    def test_all_extensions_preserve_five_assignments_and_have_exact_domains(self) -> None:
+        for count,expected in ((6,9),(7,18),(8,6)):
+            families = research.behavior_extensions(count)
+            self.assertEqual(len(families),expected)
+            self.assertEqual(len({tuple(sorted(f.items())) for f in families}),expected)
+            for family in families:
+                for code in (0,2,4,6,7):
+                    self.assertEqual(family[code],research.order_family()[code])
+                domain,target = research.extension_contract(family)
+                self.assertEqual(len(domain),count*4)
+                self.assertEqual(set(domain),set(target))
+                self.assertTrue(all(i>>2 == y>>2 for i,y in zip(domain,target,strict=True)))
+
+    def test_affine_elimination_matches_independent_exhaustive_two_bit_maps(self) -> None:
+        from typing import cast
+        candidates = {tuple(c ^ (a if i&1 else 0) ^ (b if i&2 else 0) for i in range(4))
+                      for c,a,b in product(range(4),repeat=3)}
+        for required in product(range(4),repeat=4):
+            result = research.affine_extension((0,1,2,3),required,2)
+            self.assertEqual(result['exists'],required in candidates)
+            if result['exists']:
+                self.assertEqual(cast(research.Table,result['table']),required)
+            else:
+                feature = output = 0
+                for row in cast(list[int],result['contradiction_rows']):
+                    feature ^= row | 4; output ^= required[row]
+                self.assertEqual(feature,0)
+                self.assertNotEqual(output,0)
+
+    def test_every_extension_has_a_recoverable_affine_contradiction(self) -> None:
+        for count in ('6','7','8'):
+            for row in self.evidence['extensions'][count]:
+                cert = row['affine_extension']
+                self.assertFalse(cert['exists'])
+                feature = output = 0
+                for index in cert['contradiction_rows']:
+                    feature ^= row['domain'][index] | 32
+                    output ^= row['required'][index]
+                self.assertEqual(feature,0)
+                self.assertEqual(output,cert['output_xor'])
+                self.assertNotEqual(output,0)
+
+    def test_complete_rank24_signed_graph_certificate_has_no_missing_edges(self) -> None:
+        certificate = research.rank24_orientation_certificate(self.basis)
+        saved = self.evidence['rank24_certificate']
+        self.assertEqual((certificate['vertex_count'],certificate['edge_count']),(620,16460))
+        self.assertEqual(certificate['signed_edges_sha256'],saved['signed_edges_sha256'])
+        self.assertEqual(certificate['orientation'],saved['orientation'])
+        self.assertTrue(certificate['connected'])
+
+    def test_selector_transport_closure_exhausts_all_20160_injections(self) -> None:
+        calls = research.role_complete_basis(3)
+        basis,_ = research.canonical_basis(research.sample_basis(3,calls))
+        basis = {n:t for n,t in basis.items() if len(set(t))>=6}
+        layers,counts = research.restricted_frontiers(basis,(0,2,3,4,6,7),20,25000)
+        self.assertFalse(layers[-1])
+        self.assertEqual(sum(counts),20160)
+        for item in self.evidence['selector_only_transports']:
+            word = tuple((k,tuple(v)) for k,v in item['word'])
+            table = research.sample_program(3,word)
+            self.assertEqual(tuple(table[i] for i in item['domain']),tuple(item['required']))
+            self.assertEqual(len(word),item['minimum_transport_length'])
+            self.assertFalse(item['witness_enumeration_complete'])
+
+    def test_six_case_split_and_actual_full_file_backed_witnesses(self) -> None:
+        self.assertEqual(self.evidence['six_status_counts'],{'SAT witness found':3,'UNSAT proven':6,'bounded unresolved':0})
+        for row in self.evidence['extensions']['6']:
+            if row['target_parity']:
+                self.assertEqual(row['status'],'UNSAT proven')
+            else:
+                word = tuple((k,tuple(v)) for k,v in row['word'])
+                table = research.sample_program(5,word)
+                self.assertEqual(tuple(table[i] for i in row['domain']),tuple(row['required']))
+                self.assertEqual(row['proved_lower_bound'],9)
+                self.assertIsNone(row['minimum_length'])
+
+    def test_zero_margin_trajectories_fill_each_plastic_image(self) -> None:
+        for row in self.evidence['extensions']['6']:
+            if row['status']!='SAT witness found':
+                continue
+            for stage in row['trajectory']:
+                self.assertEqual(stage['cardinality'],24)
+                self.assertEqual(stage['affine_hull_size'],32)
+                self.assertTrue(all(v is None for v in stage['fixed_bit_values']))
+                if stage['next_operation'] and stage['next_operation'][0]=='plastic':
+                    self.assertTrue(stage['next_is_injective'])
+                    self.assertTrue(stage['next_fills_global_image'])
+
+    def test_all_seven_and_eight_cases_have_all_length_rank_affine_proofs(self) -> None:
+        for count in ('7','8'):
+            rows = self.evidence['extensions'][count]
+            self.assertEqual(len(rows),18 if count=='7' else 6)
+            for row in rows:
+                self.assertEqual(row['status'],'UNSAT proven')
+                self.assertGreater(len(row['domain']),24)
+                self.assertFalse(row['affine_extension']['exists'])
+                if count=='8':
+                    self.assertTrue(row['total_properties']['bijective'])
+                    self.assertFalse(row['total_properties']['affine'])
+
+    def test_derived_controlled_toggle_is_five_existing_calls_with_clean_W(self) -> None:
+        word = research.derived_controlled_toggle(0,1,3)
+        self.assertEqual(len(word),5)
+        table = research.sample_program(6,word)
+        for i,state in enumerate(research.states(6)):
+            if state[5]==0:
+                expected = (*state[:3],state[3] ^ (state[0]&state[1]),state[4],0)
+                self.assertEqual(research.states(6)[table[i]],expected)
+
+    def test_all_six_workspace_completions_are_replayed_for_both_old_W_values(self) -> None:
+        for row in self.evidence['workspace']['eight_completions']:
+            word = tuple((k,tuple(v)) for k,v in row['word'])
+            self.assertEqual(research.sample_program(6,word),tuple(row['required']))
+            self.assertEqual(len(row['domain']),64)
+            self.assertTrue(all(y&1==0 for y in row['required']))
+            self.assertEqual(row['both_old_W_values_trajectory'][0]['cardinality'],64)
+            self.assertTrue(all(s['cardinality']==32 for s in row['both_old_W_values_trajectory'][1:]))
+        self.assertEqual(self.evidence['workspace']['configured_runtime_carriers_added'],0)
+
+    def test_seven_workspace_cases_are_exact_restrictions_of_verified_completions(self) -> None:
+        parents = self.evidence['workspace']['eight_completions']
+        for row in self.evidence['workspace']['all_eighteen_seven_extensions']:
+            parent = next(p for p in parents if p['family']==row['parent_completion'])
+            table = parent['actual_full_table']
+            self.assertEqual(tuple(table[i] for i in row['domain']),tuple(row['required']))
+            self.assertEqual(len(row['domain']),56)
+            self.assertTrue(all(s['cardinality']==28 for s in row['trajectory']))
+        self.assertEqual(self.evidence['workspace']['live_rows'],384)
+
+    def test_preserved_fingerprints_and_six_bit_solver_encoding(self) -> None:
+        import hashlib
+        import json
+        artifact = json.loads(Path('composition_results.json').read_text(encoding='utf-8'))
+        for key,sha in self.evidence['preserved_previous_sections_sha256'].items():
+            self.assertEqual(hashlib.sha256(json.dumps(artifact[key],sort_keys=True).encode()).hexdigest(),sha)
+        target = research.sample_program(6,(('toggle',(5,)),))
+        words,e = research.symbolic_program_search(6,tuple(range(64)),target,1,enumerate_all=False)
+        self.assertEqual(e['status'],'sat')
+        self.assertEqual(research.sample_program(6,words[0]),target)
+
+
+class StoredSequenceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.evidence = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))["stored_sequence"]
+        cls.target = research.stored_sequence_target()
+
+    def test_instruction_tables_and_four_words_are_independently_derived(self) -> None:
+        x = research.sample_program(2, (("toggle", (0,)),))
+        s = research.sample_program(2, (("xor", (0, 1)), ("xor", (1, 0)), ("xor", (0, 1))))
+        r = research.compose(x, s)
+        self.assertEqual(r, (1, 3, 0, 2))
+        words = {2 * p0 + p1: research.compose((x, r)[p0], (x, r)[p1]) for p0, p1 in research.states(2)}
+        self.assertEqual(words, {0: (0, 1, 2, 3), 1: (0, 2, 1, 3), 2: (3, 1, 2, 0), 3: (3, 2, 1, 0)})
+        self.assertEqual(len(set(words.values())), 4)
+        self.assertNotEqual(research.compose(x, r), research.compose(r, x))
+
+    def test_complete_one_slot_target_and_arbitrary_old_workspace(self) -> None:
+        target = research.stored_instruction_target()
+        actual = research.sample_program(4, research.stored_instruction_executor())
+        self.assertEqual(actual, target)
+        for i, (instruction, a, b, _) in enumerate(research.states(4)):
+            expected = (1 - a, b) if instruction == 0 else (b, 1 - a)
+            self.assertEqual(research.states(4)[actual[i]], (instruction, *expected, 0))
+        self.assertEqual(len(research.stored_instruction_executor()), 7)
+        self.assertFalse(self.evidence["one_slot"]["zero_initialization_required"])
+
+    def test_one_slot_minimum_is_proven_by_complete_clean_workspace_relaxations(self) -> None:
+        operations = research.role_complete_basis(4)
+        basis, _ = research.canonical_basis(research.sample_basis(4, operations))
+        initial = tuple(range(0, 16, 2))
+        for recoded in (False, True):
+            target = research.stored_instruction_target(recoded)
+            words, evidence = research.meet_shortest_programs(basis, initial,
+                tuple(target[i] for i in initial), 3, 3, 500_000)
+            self.assertEqual(words, [])
+            self.assertEqual(evidence["meeting_counts"], [])
+            self.assertEqual(research.sample_program(4, research.stored_instruction_executor(recoded)), target)
+        self.assertEqual(self.evidence["one_slot"]["minimum_calls"], 7)
+
+    def test_same_slot_schema_transports_and_leaves_other_slot_untouched(self) -> None:
+        single = research.stored_instruction_executor()
+        for slot in (0, 1):
+            roles = (slot, 2, 3, 4)
+            transported = tuple((kind, tuple(roles[i] for i in indices)) for kind, indices in single)
+            self.assertEqual(transported, research.stored_slot_executor(slot))
+            table = research.sample_program(5, transported)
+            for i, state in enumerate(research.states(5)):
+                instruction = state[slot]
+                data = (1 - state[2], state[3]) if instruction == 0 else (state[3], 1 - state[2])
+                self.assertEqual(research.states(5)[table[i]], (*state[:2], *data, 0))
+
+    def test_slot_boundary_records_match_repeated_runtime_decoder_consumption(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for row in self.evidence["slot_boundary_rows"]:
+                mid = research.execute(tuple(row["initial"]), research.stored_slot_executor(0), paths)
+                self.assertEqual(mid, tuple(row["after_slot0"]))
+                for op in research.stored_slot_executor(1):
+                    research.apply_operation(op, paths)
+                self.assertEqual(tuple(runtime.read_state(p) for p in paths), tuple(row["after_slot1"]))
+        self.assertEqual(research.stored_sequence_executor(), research.stored_slot_executor(0) + research.stored_slot_executor(1))
+        self.assertEqual(len(research.stored_sequence_executor()), 14)
+
+    def test_global_search_bounds_are_explicit_and_every_retained_full_word_replays(self) -> None:
+        evidence = self.evidence
+        self.assertEqual(evidence["global_proved_lower_bound"], 7)
+        self.assertEqual(evidence["global_minimum_calls"], 7)
+        self.assertEqual(evidence["global_calls"], 7)
+        checks = evidence["global_search"]["records"]
+        self.assertTrue(all(next(e for e in checks if e["length"] == k)["status"] == "unsat" for k in range(6)))
+        six = next(e for e in checks if e["length"] == 6)
+        self.assertEqual(six["status"], "unknown")
+        relaxed = evidence["global_relaxation_search"]
+        self.assertEqual(tuple(relaxed["initial"]), tuple(range(0, 32, 2)))
+        self.assertEqual(tuple(relaxed["target"]), tuple(self.target[i] for i in relaxed["initial"]))
+        lower = next(r["evidence"] for r in relaxed["records"] if r["evidence"]["length"] == 6)
+        self.assertEqual(lower["status"], "unsat")
+        self.assertTrue(lower["enumeration_complete"] and lower["injective_prefixes"])
+        self.assertIsNone(evidence["global_shortest_word_count"])
+        for raw in evidence["global_search"]["words"]:
+            word = tuple((kind, tuple(roles)) for kind, roles in raw)
+            self.assertEqual(research.sample_program(5, word), self.target)
+        word = tuple((kind, tuple(roles)) for kind, roles in evidence["global_word"])
+        self.assertEqual(research.sample_program(5, word), self.target)
+
+    def test_repeated_instructions_are_two_identical_decoders_with_real_boundaries(self) -> None:
+        for program, first_table, final_table in ((0, (2, 3, 0, 1), (0, 1, 2, 3)),
+                                                   (3, (1, 3, 0, 2), (3, 2, 1, 0))):
+            rows = [r for r in self.evidence["slot_boundary_rows"] if 2 * r["initial"][0] + r["initial"][1] == program]
+            self.assertEqual(len(rows), 8)
+            for row in rows:
+                index = 2 * row["initial"][2] + row["initial"][3]
+                self.assertEqual(2 * row["after_slot0"][2] + row["after_slot0"][3], first_table[index])
+                self.assertEqual(2 * row["after_slot1"][2] + row["after_slot1"][3], final_table[index])
+
+    def test_local_edits_replace_only_the_selected_instruction(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for slot in (0, 1):
+                runtime.write_state(0, paths[0]); runtime.write_state(1, paths[1])
+                unchanged = paths[1 - slot].read_bytes()
+                for program in ((0, 1), (1, 1) if slot == 0 else (0, 0)):
+                    runtime.write_state(program[slot], paths[slot])
+                    for a, b in research.states(2):
+                        runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                        for op in research.stored_sequence_executor():
+                            research.apply_operation(op, paths)
+                        expected = self.target[research.states(5).index((*program, a, b, 0))]
+                        self.assertEqual(tuple(runtime.read_state(p) for p in paths), research.states(5)[expected])
+                        self.assertEqual(paths[1 - slot].read_bytes(), unchanged)
+
+    def test_persist_once_reuse_with_data_only_rewrites(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for p0, p1 in research.states(2):
+                research.execute((p0, p1, 0, 0, 1), (), paths)
+                saved = tuple(p.read_bytes() for p in paths[:2])
+                for a, b in research.states(2) * 2:
+                    runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                    for op in research.stored_sequence_executor():
+                        research.apply_operation(op, paths)
+                    self.assertEqual(tuple(p.read_bytes() for p in paths[:2]), saved)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths), research.states(5)[self.target[8 * (2 * p0 + p1) + 4 * a + 2 * b]])
+
+    def test_word_written_in_one_process_consumed_in_fresh_processes(self) -> None:
+        import subprocess
+        import sys
+        initialize = "from pathlib import Path; import sys,arxmentis as a; a.write_state(int(sys.argv[1]),Path(sys.argv[3])); a.write_state(int(sys.argv[2]),Path(sys.argv[4]))"
+        consume = "from pathlib import Path; import sys,composition_experiments as r; p=tuple(Path(x) for x in sys.argv[1:]); [r.apply_operation(op,p) for op in r.stored_sequence_executor()]"
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(5))
+            for p0, p1 in research.states(2):
+                subprocess.run([sys.executable, "-B", "-c", initialize, str(p0), str(p1), str(paths[0]), str(paths[1])], check=True, capture_output=True)
+                saved = tuple(p.read_bytes() for p in paths[:2])
+                runtime.write_state(1, paths[4])
+                for a, b in research.states(2) * 2:
+                    runtime.write_state(a, paths[2]); runtime.write_state(b, paths[3])
+                    subprocess.run([sys.executable, "-B", "-c", consume, *(str(p) for p in paths)], check=True, capture_output=True)
+                    self.assertEqual(tuple(runtime.read_state(p) for p in paths), research.states(5)[self.target[8 * (2 * p0 + p1) + 4 * a + 2 * b]])
+                    self.assertEqual(tuple(p.read_bytes() for p in paths[:2]), saved)
+
+    def test_all_120_physical_assignments_and_all_32_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            physical = tuple(Path(directory) / name for name in (".arxmentis-state", ".arxmentis-state-2", ".arxmentis-memory", ".arxmentis-policy", ".arxmentis-policy-1"))
+            for paths in permutations(physical):
+                for i, initial in enumerate(research.states(5)):
+                    self.assertEqual(research.execute(initial, research.stored_sequence_executor(), paths), research.states(5)[self.target[i]])
+
+    def test_instruction_complement_transports_one_and_two_slot_targets(self) -> None:
+        one = research.stored_instruction_target()
+        self.assertEqual(research.transport_mask(one, 8), research.stored_instruction_target(True))
+        self.assertEqual(research.transport_mask(self.target, 24), research.stored_sequence_target(recoded=True))
+        self.assertEqual(research.sample_program(5, research.stored_sequence_executor(True)), research.stored_sequence_target(recoded=True))
+        raw = self.evidence["recoding"]["global_word"]
+        self.assertEqual(research.sample_program(5, tuple((k, tuple(v)) for k, v in raw)), research.stored_sequence_target(recoded=True))
+
+    def test_position_transport_and_content_swap_have_distinct_full_state_effects(self) -> None:
+        native = research.stored_sequence_executor()
+        sigma = (1, 0, 2, 3, 4)
+        transported = tuple((kind, tuple(sigma[i] for i in roles)) for kind, roles in native)
+        forward = research.sample_program(5, native)
+        reverse = research.sample_program(5, transported)
+        for i, state in enumerate(research.states(5)):
+            mapped = tuple(state[j] for j in sigma)
+            mapped_index = research.states(5).index(mapped)
+            output = tuple(research.states(5)[forward[i]][j] for j in sigma)
+            self.assertEqual(research.states(5)[reverse[mapped_index]], output)
+        # Reversing consumption retains 01; swapping contents makes 10.
+        self.assertEqual(research.states(5)[reverse[8]][:2], (0, 1))
+        self.assertEqual(research.states(5)[forward[16]][:2], (1, 0))
+        self.assertEqual(research.states(5)[reverse[8]][2:], research.states(5)[forward[16]][2:])
+        self.assertNotEqual(forward[8], reverse[8])
+
+    def test_flat_control_has_exactly_same_extensional_search_problem(self) -> None:
+        flat = self.evidence["flat_control"]
+        self.assertEqual(tuple(flat["target"]), self.target)
+        self.assertEqual(flat["minimum_calls"], 7)
+        self.assertEqual(flat["properties"], self.evidence["properties"])
+        self.assertEqual(flat["trajectory"], self.evidence["trajectories"]["global"])
+        self.assertTrue(flat["local_edit_data_effects_identical"])
+        # Independently expose the commuting membership alternative: S^(P0 xor P1), XY^P0.
+        s, xy = (0, 2, 1, 3), (3, 2, 1, 0)
+        self.assertEqual(research.compose(s, xy), research.compose(xy, s))
+        for p0, p1 in research.states(2):
+            f = research.compose(s if p0 ^ p1 else tuple(range(4)), xy if p0 else tuple(range(4)))
+            self.assertEqual(tuple((self.target[8 * (2 * p0 + p1) + 2 * d] >> 1) & 3 for d in range(4)), f)
+
+    def test_every_prefix_retains_required_classes_and_next_noninjective_use_is_safe(self) -> None:
+        for pair in self.evidence["trajectories"].values():
+            clean = pair["canonical_W0"]
+            self.assertTrue(all(r["cardinality"] == 16 for r in clean))
+            self.assertTrue(all(r["program_values_preserved"] for r in clean))
+            self.assertTrue(all(r["selector_codes"] == r["program_codes"] for r in clean))
+            for stage in clean:
+                if stage["next_globally_noninjective"]:
+                    self.assertTrue(stage["next_is_injective"])
+            self.assertEqual(clean[-1]["W_fixed_value"], 0)
+            self.assertEqual(pair["both_old_W"][0]["cardinality"], 32)
+            self.assertEqual(pair["both_old_W"][-1]["cardinality"], 16)
+
+    def test_no_workspace_total_bijections_are_impossible_in_complete_basis(self) -> None:
+        for width, row in self.evidence["no_workspace_all_length_proofs"].items():
+            target = tuple(row["target"])
+            self.assertEqual(len(set(target)), 1 << int(width))
+            self.assertFalse(research.is_affine(target))
+            basis = research.sample_basis(int(width), research.role_complete_basis(int(width)))
+            self.assertTrue(all(research.is_affine(t) for t in basis.values() if len(set(t)) == len(target)))
+        self.assertEqual(self.evidence["minimum_dedicated_workspace_bits"], 1)
+        self.assertEqual(self.evidence["configured_carriers_added"], 0)
+
+    def test_every_previous_evidence_fingerprint_is_preserved(self) -> None:
+        import hashlib
+        import json
+        artifact = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))
+        for key, sha in self.evidence["preserved_previous_sections_sha256"].items():
+            self.assertEqual(hashlib.sha256(json.dumps(artifact[key], sort_keys=True).encode()).hexdigest(), sha)
+        self.assertEqual(len(self.evidence["preserved_previous_sections_sha256"]), 11)
+
+
 if __name__ == "__main__":
     unittest.main()
