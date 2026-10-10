@@ -2,32 +2,32 @@
   "date": "2026-10-09",
   "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
   "python_version": "3.14.6",
-  "baseline_tests": 128,
+  "baseline_tests": 146,
   "historical_tests": 40,
   "focused": {
-    "module": "test_composition_experiments.SemanticLengthTests",
-    "tests": 18,
+    "module": "test_composition_experiments.PersistentCursorTests",
+    "tests": 23,
     "passed": true,
-    "seconds": 110.027
+    "seconds": 161.559
   },
   "experimental": {
     "module": "test_composition_experiments",
-    "tests": 106,
+    "tests": 129,
     "passed": true,
     "tested_as_part_of_full_suite": true
   },
   "full": {
     "command": ".venv/Scripts/python.exe -B -m unittest -v",
-    "tests": 146,
+    "tests": 169,
     "passed": true,
-    "seconds": 561.472
+    "seconds": 705.673
   },
   "historical_runtime_and_test_sha256_unchanged": true,
   "source_sha256": {
     "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
     "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-    "composition_experiments.py": "e2b7606e8538484c713fcc1feb99c5f22bc5ee229ce176e23ad067d1a5ef6fe4",
-    "test_composition_experiments.py": "d0b1a09a0a6fe00fa52f9cab26e4c464e114941e877ec4ab43e2ba890358950e"
+    "composition_experiments.py": "bfc59ac789b21adcf41bb32a8289a08196ee25481067b321326d4382b37dd682",
+    "test_composition_experiments.py": "2360a90a6d612d523d35ad7b3a8b96d7b6708766d5f2258d03201fd9a7e508e5"
   },
   "protected_source_sha256": {
     "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
@@ -55,48 +55,46 @@
   "evidence_artifact_consistency_check": true,
   "new_artifact_trailing_whitespace_check": true,
   "artifact_checks": {
-    "all_twelve_previous_evidence_sections_and_fingerprints_unchanged": true,
-    "all_128_prior_tests_byte_preserved_when_new_class_removed": true,
-    "all_prior_foundations_bytes_preserved_when_section_18_removed": true,
+    "all_thirteen_previous_evidence_sections_and_fingerprints_unchanged": true,
+    "all_146_prior_tests_byte_preserved_when_new_class_removed": true,
+    "all_prior_foundations_bytes_preserved_when_section_19_removed": true,
     "runtime_historical_tests_readme_gitignore_unchanged": true,
-    "trajectories_audited": 6,
-    "prefix_records_audited": 98,
-    "runtime_operation_tables_sampled_in_independent_trajectory_audit": 14,
-    "actual_file_cut_observations": 144,
+    "trajectories_audited": 8,
+    "prefix_records_audited": 168,
+    "runtime_operation_tables_sampled_in_independent_trajectory_audit": 16,
+    "actual_file_modular_stage_inputs": 64,
     "physical_role_assignments": 120,
-    "actual_file_remapping_executions": 2880,
-    "initializer_processes": 6,
-    "consumer_processes": 48
+    "actual_file_remapping_executions": 7680,
+    "process_continuation_pairs": 32,
+    "explicit_intervention_pairs": 192
   },
-  "semantic_length": {
-    "canonical_codes": [
-      0,
-      2,
-      4,
-      5,
-      6,
-      7
+  "persistent_cursor": {
+    "roles": [
+      "C",
+      "P0",
+      "P1",
+      "A",
+      "B",
+      "W"
     ],
-    "canonical_distinctions": 24,
-    "unused_five_bit_configurations": 8,
-    "representation_minimum_bits": 3,
-    "natural_total_image_size": 32,
-    "natural_total_boolean_degree": 3,
-    "natural_total_all_length_impossibility": true,
-    "five_carrier_canonical_all_length_impossibility": true,
-    "target_parity": 1,
-    "orientation_certificate_vertices": 620,
-    "orientation_certificate_edges": 16460,
-    "signed_edges_sha256": "43fd86e6e3f88de5eaec44532653210dee01d2333cec2b78a74b2e79cc7a6803",
-    "temporary_bits": 1,
-    "configured_carriers_added": 0,
-    "old_W_arbitrary": true,
-    "final_W": 0,
-    "native_calls_upper_bound": 14,
-    "native_fixed_cut": 7,
-    "endpoint_lower_bound": 6,
-    "endpoint_minimum": null,
-    "endpoint_unresolved_lengths": [
+    "full_target_rows": 64,
+    "required_distinctions": 32,
+    "image_size": 32,
+    "boolean_degree": 3,
+    "old_W_only_discarded": true,
+    "raw_basis_calls": 426,
+    "unique_basis_tables": 336,
+    "modular_calls": 20,
+    "modular_stage_cuts": [
+      6,
+      13,
+      19,
+      20
+    ],
+    "global_proven_lower_bound": 6,
+    "global_witness_upper_bound": 20,
+    "global_minimum": null,
+    "global_unresolved_lengths": [
       6,
       7,
       8,
@@ -104,32 +102,64 @@
       10,
       11,
       12,
-      13
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
     ],
-    "exact_program_boundary_lower_bound": 8,
-    "boundary_minimum": null,
-    "boundary_unresolved_lengths": [
+    "global_solver_found_words": 0,
+    "global_compression_found": false,
+    "full_search_max_length": 12,
+    "full_search_timeouts": [
+      6,
+      7,
       8,
       9,
       10,
       11,
-      12,
-      13
+      12
     ],
-    "lower_bound_scope": "exact restored program at one all-input cut; weaker recoverable cut representations not searched",
-    "recoded_calls_upper_bound": 16,
-    "recoded_minima": null,
-    "native_reserved_codes_visited": [],
-    "length_recoding_reserved_codes_visited": [
-      5,
-      7
+    "clean_relaxation_timeouts": [
+      6,
+      7,
+      8,
+      9
     ],
-    "instruction_recoding_reserved_codes_visited": [
-      0,
-      2
-    ],
-    "flat_selector_endpoint_identical": true,
-    "variable_primitive_call_count_demonstrated": false
+    "instruction_recoded_upper_bound": 20,
+    "cursor_recoded_upper_bound": 20,
+    "cursor_conjugated_upper_bound": 22,
+    "recoded_minimums": null,
+    "inactive_slot_interventions": 64,
+    "cursor_only_interventions": 64,
+    "active_slot_substitutions": 64,
+    "cursor_advancement": "exact complement on all64 inputs; no external edit between repeated STEP",
+    "two_identical_step_rows": 64,
+    "process_A_count": 32,
+    "process_B_count": 32,
+    "continuation_receives_cursor_or_slot_argument": false,
+    "configured_carriers_added": 0,
+    "temporary_extra_bits": 1,
+    "five_role_no_workspace_all_length_impossible": true,
+    "physical_remapping": {
+      "configured_role_assignments": 120,
+      "full64_rows": 7680,
+      "seconds": 211.124,
+      "word": "modular",
+      "full_six_assignments": 0,
+      "full_six_clean_W_rows": 0,
+      "optional_estimated_seconds": 633.372,
+      "optional_estimated_cost_cap_seconds": 180.0,
+      "optional_status": "not run: estimated cost exceeds declared180-second optional budget"
+    },
+    "external_slot_selection_control_rows": 64,
+    "external_control_primitive_calls": 8,
+    "external_control_cursor_branch": true,
+    "actual_STEP_harness_cursor_dispatch": false,
+    "DONE_or_termination_demonstrated": false,
+    "length_combined_with_cursor": false
   },
   "bytecode_policy": "Explicit -B for tests, child processes and evidence; existing tracked caches unchanged",
   "research_solver": {
@@ -142,32 +172,38 @@
     "date": "2026-10-09",
     "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
     "python_version": "3.14.6",
-    "baseline_tests": 111,
+    "baseline_tests": 128,
     "historical_tests": 40,
     "focused": {
-      "module": "test_composition_experiments.StoredSequenceTests",
-      "tests": 17,
+      "module": "test_composition_experiments.SemanticLengthTests",
+      "tests": 18,
       "passed": true,
-      "seconds": 109.564
+      "seconds": 110.027
     },
     "experimental": {
       "module": "test_composition_experiments",
-      "tests": 88,
+      "tests": 106,
       "passed": true,
       "tested_as_part_of_full_suite": true
     },
     "full": {
       "command": ".venv/Scripts/python.exe -B -m unittest -v",
-      "tests": 128,
+      "tests": 146,
       "passed": true,
-      "seconds": 458.631
+      "seconds": 561.472
     },
     "historical_runtime_and_test_sha256_unchanged": true,
     "source_sha256": {
       "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
       "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-      "composition_experiments.py": "1e7e843a291389375eec4a51da80fc204e9b5c3f3e1f1235e2af9273f198b50a",
-      "test_composition_experiments.py": "3eeb8df0d29573f30c1fc2f6fa0caf165aa55b4f7b62a40a98f2c13c39718b23"
+      "composition_experiments.py": "e2b7606e8538484c713fcc1feb99c5f22bc5ee229ce176e23ad067d1a5ef6fe4",
+      "test_composition_experiments.py": "d0b1a09a0a6fe00fa52f9cab26e4c464e114941e877ec4ab43e2ba890358950e"
+    },
+    "protected_source_sha256": {
+      "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
+      "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
+      "README.md": "96edb8c8ddb82799e40b1355382119eb6b6c343e7a2d92ac36632fa68a50adf3",
+      ".gitignore": "8c3fe9b46b5712130f482cf2ac4169f2fb33f651632cb2db44194a4974919bf2"
     },
     "pylance": {
       "version": "2026.4.1",
@@ -189,119 +225,119 @@
     "evidence_artifact_consistency_check": true,
     "new_artifact_trailing_whitespace_check": true,
     "artifact_checks": {
-      "all_eleven_previous_evidence_sections_and_fingerprints_unchanged": true,
-      "all_71_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
-      "all_prior_foundations_bytes_preserved_when_section_17_removed": true,
+      "all_twelve_previous_evidence_sections_and_fingerprints_unchanged": true,
+      "all_128_prior_tests_byte_preserved_when_new_class_removed": true,
+      "all_prior_foundations_bytes_preserved_when_section_18_removed": true,
       "runtime_historical_tests_readme_gitignore_unchanged": true,
-      "trajectories_audited": 10,
-      "prefix_records_audited": 112,
-      "runtime_operation_tables_sampled_in_independent_trajectory_audit": 26
+      "trajectories_audited": 6,
+      "prefix_records_audited": 98,
+      "runtime_operation_tables_sampled_in_independent_trajectory_audit": 14,
+      "actual_file_cut_observations": 144,
+      "physical_role_assignments": 120,
+      "actual_file_remapping_executions": 2880,
+      "initializer_processes": 6,
+      "consumer_processes": 48
     },
-    "bytecode_policy": "Explicit -B for parent tests, child processes and evidence; existing tracked caches unchanged",
+    "semantic_length": {
+      "canonical_codes": [
+        0,
+        2,
+        4,
+        5,
+        6,
+        7
+      ],
+      "canonical_distinctions": 24,
+      "unused_five_bit_configurations": 8,
+      "representation_minimum_bits": 3,
+      "natural_total_image_size": 32,
+      "natural_total_boolean_degree": 3,
+      "natural_total_all_length_impossibility": true,
+      "five_carrier_canonical_all_length_impossibility": true,
+      "target_parity": 1,
+      "orientation_certificate_vertices": 620,
+      "orientation_certificate_edges": 16460,
+      "signed_edges_sha256": "43fd86e6e3f88de5eaec44532653210dee01d2333cec2b78a74b2e79cc7a6803",
+      "temporary_bits": 1,
+      "configured_carriers_added": 0,
+      "old_W_arbitrary": true,
+      "final_W": 0,
+      "native_calls_upper_bound": 14,
+      "native_fixed_cut": 7,
+      "endpoint_lower_bound": 6,
+      "endpoint_minimum": null,
+      "endpoint_unresolved_lengths": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "exact_program_boundary_lower_bound": 8,
+      "boundary_minimum": null,
+      "boundary_unresolved_lengths": [
+        8,
+        9,
+        10,
+        11,
+        12,
+        13
+      ],
+      "lower_bound_scope": "exact restored program at one all-input cut; weaker recoverable cut representations not searched",
+      "recoded_calls_upper_bound": 16,
+      "recoded_minima": null,
+      "native_reserved_codes_visited": [],
+      "length_recoding_reserved_codes_visited": [
+        5,
+        7
+      ],
+      "instruction_recoding_reserved_codes_visited": [
+        0,
+        2
+      ],
+      "flat_selector_endpoint_identical": true,
+      "variable_primitive_call_count_demonstrated": false
+    },
+    "bytecode_policy": "Explicit -B for tests, child processes and evidence; existing tracked caches unchanged",
     "research_solver": {
       "package": "z3-solver",
       "package_version": "4.15.4.0",
       "core_version": "4.15.4",
       "runtime_dependency": false
     },
-    "stored_sequence": {
-      "alphabet": {
-        "0": [
-          2,
-          3,
-          0,
-          1
-        ],
-        "1": [
-          1,
-          3,
-          0,
-          2
-        ],
-        "names": [
-          "X",
-          "R = S after X"
-        ]
-      },
-      "four_distinct_length_two_words": true,
-      "one_slot_raw_labels": 100,
-      "one_slot_primitive_tables": 76,
-      "one_slot_minimum_calls": 7,
-      "one_slot_recoded_minimum_calls": 7,
-      "zero_initialization_required": false,
-      "two_slot_full_cube_rows": 32,
-      "two_slot_canonical_required_distinctions": 16,
-      "modular_calls": 14,
-      "global_minimum_calls": 7,
-      "global_proved_lower_bound": 7,
-      "full_six_call_timeout_preserved": true,
-      "clean_prefix_injective_six_call_relaxation_unsat": true,
-      "shortest_global_word_count": null,
-      "recoded_two_slot_global_calls_upper_bound": 9,
-      "recoded_two_slot_global_minimum_calls": null,
-      "same_decoder_schema_consumed_in_both_slots": true,
-      "actual_slot_boundaries_verified": 32,
-      "program_positions_preserved": true,
-      "both_repeated_words_and_mixed_order_verified": true,
-      "only_P0_and_only_P1_counterfactual_substitutions_verified": true,
-      "physical_assignments": 120,
-      "physical_remapping_rows": 3840,
-      "in_process_reuse_executions": 32,
-      "separate_process_initializers": 4,
-      "separate_process_consumers": 32,
-      "instruction_complement_transport_verified": true,
-      "position_and_carrier_maps_separated": true,
-      "flat_local_edit_data_effects_identical": true,
-      "execution_cost_advantage_over_identically_assigned_flat_control": false,
-      "minimum_dedicated_workspace_capacities": 1,
-      "configured_runtime_carriers_added": 0,
-      "sixth_research_carrier_used": false,
-      "every_canonical_prefix_preserves_sixteen_required_classes": true,
-      "globally_noninjective_primitives_safe_on_canonical_reached_sets": true,
-      "external_grammar": "Exactly two positions, common 0:X/1:R alphabet, consume P0 then P1; retained fixed call words supplied by Python, no endogenous invocation",
-      "one_slot_lengths_zero_through_six_excluded_by_complete_meet_search": true,
-      "old_W_expendable": true,
-      "final_W": 0,
-      "flat_same_full_target": true,
-      "flat_minimum_calls": 7
-    },
-    "changed_files": [
-      "FOUNDATIONS.md",
-      "composition_experiments.py",
-      "test_composition_experiments.py",
-      "composition_results.json",
-      "validation_results.json"
-    ],
     "previous_research_pass": {
       "date": "2026-10-09",
       "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
       "python_version": "3.14.6",
-      "baseline_tests": 95,
+      "baseline_tests": 111,
       "historical_tests": 40,
       "focused": {
-        "module": "test_composition_experiments.SlackWorkspaceTests",
-        "tests": 16,
+        "module": "test_composition_experiments.StoredSequenceTests",
+        "tests": 17,
         "passed": true,
-        "seconds": 61.013
+        "seconds": 109.564
       },
       "experimental": {
         "module": "test_composition_experiments",
-        "tests": 71,
+        "tests": 88,
         "passed": true,
         "tested_as_part_of_full_suite": true
       },
       "full": {
         "command": ".venv/Scripts/python.exe -B -m unittest -v",
-        "tests": 111,
+        "tests": 128,
         "passed": true,
-        "seconds": 361.753
+        "seconds": 458.631
       },
       "historical_runtime_and_test_sha256_unchanged": true,
       "source_sha256": {
         "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
         "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-        "composition_experiments.py": "6ed6cdbdd19cd03c5e066904addade9d0ed3f1d1b6ccea3a2ed9cb4e592b1761",
-        "test_composition_experiments.py": "c92f9a076bcc2814bd0c5e1344ffb1cd686fee80edb110dadc3eaa6302d551aa"
+        "composition_experiments.py": "1e7e843a291389375eec4a51da80fc204e9b5c3f3e1f1235e2af9273f198b50a",
+        "test_composition_experiments.py": "3eeb8df0d29573f30c1fc2f6fa0caf165aa55b4f7b62a40a98f2c13c39718b23"
       },
       "pylance": {
         "version": "2026.4.1",
@@ -323,70 +359,81 @@
       "evidence_artifact_consistency_check": true,
       "new_artifact_trailing_whitespace_check": true,
       "artifact_checks": {
-        "all_ten_prior_evidence_sections_and_fingerprints_unchanged": true,
-        "all_55_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
-        "all_prior_foundations_sections_text_preserved": true,
+        "all_eleven_previous_evidence_sections_and_fingerprints_unchanged": true,
+        "all_71_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
+        "all_prior_foundations_bytes_preserved_when_section_17_removed": true,
         "runtime_historical_tests_readme_gitignore_unchanged": true,
-        "exact_trajectories_recomputed": 33,
-        "prefix_records_recomputed": 1301,
-        "runtime_sampled_operation_tables_in_trajectory_audit": 30,
-        "derived_selector_alphabet_supports_grounded_in_runtime": 12,
-        "W0_inputs_per_derived_support_grounding": 32
+        "trajectories_audited": 10,
+        "prefix_records_audited": 112,
+        "runtime_operation_tables_sampled_in_independent_trajectory_audit": 26
       },
-      "bytecode_policy": "Explicit -B for tests, child processes, and evidence; historical tracked caches unchanged",
+      "bytecode_policy": "Explicit -B for parent tests, child processes and evidence; existing tracked caches unchanged",
       "research_solver": {
         "package": "z3-solver",
         "package_version": "4.15.4.0",
         "core_version": "4.15.4",
         "runtime_dependency": false
       },
-      "slack_workspace": {
-        "baseline_commit": "5e062ae",
-        "primitive_labels": 225,
-        "primitive_tables": 175,
-        "rank24_vertices": 620,
-        "rank24_candidate_edges": 52700,
-        "rank24_injective_edges": 16460,
-        "rank24_parity_certificate_complete": true,
-        "six_cases": 9,
-        "six_status_counts": {
-          "SAT witness found": 3,
-          "UNSAT proven": 6,
-          "bounded unresolved": 0
+      "stored_sequence": {
+        "alphabet": {
+          "0": [
+            2,
+            3,
+            0,
+            1
+          ],
+          "1": [
+            1,
+            3,
+            0,
+            2
+          ],
+          "names": [
+            "X",
+            "R = S after X"
+          ]
         },
-        "six_witness_lengths": [
-          16,
-          11,
-          21
-        ],
-        "six_executor_minima_known": false,
-        "six_common_proved_lower_bound": 9,
-        "all_plastic_steps_fill_global_image_on_24_rows": true,
-        "seven_cases": 18,
-        "seven_all_length_impossibility_proven": true,
-        "eight_cases": 6,
-        "eight_all_length_impossibility_proven": true,
-        "all_33_targets_have_affine_contradiction_certificates": true,
-        "selector_six_row_closure_size": 20160,
-        "selector_full_permutation_closure_size": 40320,
-        "transport_word_enumeration_complete": false,
-        "minimum_extra_expendable_workspace_bits_for_seven_eight_cases": 1,
+        "four_distinct_length_two_words": true,
+        "one_slot_raw_labels": 100,
+        "one_slot_primitive_tables": 76,
+        "one_slot_minimum_calls": 7,
+        "one_slot_recoded_minimum_calls": 7,
+        "zero_initialization_required": false,
+        "two_slot_full_cube_rows": 32,
+        "two_slot_canonical_required_distinctions": 16,
+        "modular_calls": 14,
+        "global_minimum_calls": 7,
+        "global_proved_lower_bound": 7,
+        "full_six_call_timeout_preserved": true,
+        "clean_prefix_injective_six_call_relaxation_unsat": true,
+        "shortest_global_word_count": null,
+        "recoded_two_slot_global_calls_upper_bound": 9,
+        "recoded_two_slot_global_minimum_calls": null,
+        "same_decoder_schema_consumed_in_both_slots": true,
+        "actual_slot_boundaries_verified": 32,
+        "program_positions_preserved": true,
+        "both_repeated_words_and_mixed_order_verified": true,
+        "only_P0_and_only_P1_counterfactual_substitutions_verified": true,
+        "physical_assignments": 120,
+        "physical_remapping_rows": 3840,
+        "in_process_reuse_executions": 32,
+        "separate_process_initializers": 4,
+        "separate_process_consumers": 32,
+        "instruction_complement_transport_verified": true,
+        "position_and_carrier_maps_separated": true,
+        "flat_local_edit_data_effects_identical": true,
+        "execution_cost_advantage_over_identically_assigned_flat_control": false,
+        "minimum_dedicated_workspace_capacities": 1,
         "configured_runtime_carriers_added": 0,
-        "temporary_research_carriers": 1,
-        "workspace_word_lengths": [
-          27,
-          41,
-          39,
-          49,
-          49,
-          39
-        ],
-        "workspace_executor_minima_known": false,
-        "all_64_inputs_both_old_W_values_verified_for_each_completion": true,
-        "all_eighteen_seven_cases_verified_by_exact_restriction": true,
-        "five_bit_live_rows": 72,
-        "six_bit_live_rows": 384,
-        "unresolved_extension_classifications": 0
+        "sixth_research_carrier_used": false,
+        "every_canonical_prefix_preserves_sixteen_required_classes": true,
+        "globally_noninjective_primitives_safe_on_canonical_reached_sets": true,
+        "external_grammar": "Exactly two positions, common 0:X/1:R alphabet, consume P0 then P1; retained fixed call words supplied by Python, no endogenous invocation",
+        "one_slot_lengths_zero_through_six_excluded_by_complete_meet_search": true,
+        "old_W_expendable": true,
+        "final_W": 0,
+        "flat_same_full_target": true,
+        "flat_minimum_calls": 7
       },
       "changed_files": [
         "FOUNDATIONS.md",
@@ -399,32 +446,32 @@
         "date": "2026-10-09",
         "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
         "python_version": "3.14.6",
-        "baseline_tests": 82,
+        "baseline_tests": 95,
         "historical_tests": 40,
         "focused": {
-          "module": "test_composition_experiments.PersistentOrderTests",
-          "tests": 13,
+          "module": "test_composition_experiments.SlackWorkspaceTests",
+          "tests": 16,
           "passed": true,
-          "seconds": 95.926
+          "seconds": 61.013
         },
         "experimental": {
           "module": "test_composition_experiments",
-          "tests": 55,
+          "tests": 71,
           "passed": true,
           "tested_as_part_of_full_suite": true
         },
         "full": {
           "command": ".venv/Scripts/python.exe -B -m unittest -v",
-          "tests": 95,
+          "tests": 111,
           "passed": true,
-          "seconds": 329.859
+          "seconds": 361.753
         },
         "historical_runtime_and_test_sha256_unchanged": true,
         "source_sha256": {
           "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
           "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-          "composition_experiments.py": "5013f9e291f5131edc0c4454b4d4cfcc6686caee14f3513b9f303d407b79f91a",
-          "test_composition_experiments.py": "ca27cfba9d9d9461a13da456bacbb8fc3b7765d5eb37da68548d019581bc4dc8"
+          "composition_experiments.py": "6ed6cdbdd19cd03c5e066904addade9d0ed3f1d1b6ccea3a2ed9cb4e592b1761",
+          "test_composition_experiments.py": "c92f9a076bcc2814bd0c5e1344ffb1cd686fee80edb110dadc3eaa6302d551aa"
         },
         "pylance": {
           "version": "2026.4.1",
@@ -446,95 +493,108 @@
         "evidence_artifact_consistency_check": true,
         "new_artifact_trailing_whitespace_check": true,
         "artifact_checks": {
-          "all_prior_evidence_sections_unchanged": true,
-          "all_42_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
-          "retained_search_words_replayed_against_runtime_sampled_tables": 4,
-          "every_retained_executor_prefix_verified": true
+          "all_ten_prior_evidence_sections_and_fingerprints_unchanged": true,
+          "all_55_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
+          "all_prior_foundations_sections_text_preserved": true,
+          "runtime_historical_tests_readme_gitignore_unchanged": true,
+          "exact_trajectories_recomputed": 33,
+          "prefix_records_recomputed": 1301,
+          "runtime_sampled_operation_tables_in_trajectory_audit": 30,
+          "derived_selector_alphabet_supports_grounded_in_runtime": 12,
+          "W0_inputs_per_derived_support_grounding": 32
         },
-        "bytecode_policy": "Explicit -B for new tests and all child processes; historical tracked caches unchanged",
+        "bytecode_policy": "Explicit -B for tests, child processes, and evidence; historical tracked caches unchanged",
         "research_solver": {
           "package": "z3-solver",
           "package_version": "4.15.4.0",
           "core_version": "4.15.4",
           "runtime_dependency": false
         },
-        "persistent_order": {
-          "configured_carriers": 5,
+        "slack_workspace": {
+          "baseline_commit": "5e062ae",
           "primitive_labels": 225,
           "primitive_tables": 175,
-          "rank_pruned_tables": 85,
-          "selector_representation_lower_bound_bits": 3,
-          "total_target_rank": 32,
-          "total_target_degree": 3,
-          "total_all_length_impossibility_proven": true,
-          "restricted_domain_rows": 20,
-          "executor_length": 11,
-          "executor_minimum_length": null,
-          "proved_minimum_interval": [
-            9,
-            11
+          "rank24_vertices": 620,
+          "rank24_candidate_edges": 52700,
+          "rank24_injective_edges": 16460,
+          "rank24_parity_certificate_complete": true,
+          "six_cases": 9,
+          "six_status_counts": {
+            "SAT witness found": 3,
+            "UNSAT proven": 6,
+            "bounded unresolved": 0
+          },
+          "six_witness_lengths": [
+            16,
+            11,
+            21
           ],
-          "exact_shortest_word_count": null,
-          "reserved_intermediate_states_necessary_proven": true,
-          "main_reserved_codes_visited": [
-            1,
-            3,
-            5
+          "six_executor_minima_known": false,
+          "six_common_proved_lower_bound": 9,
+          "all_plastic_steps_fill_global_image_on_24_rows": true,
+          "seven_cases": 18,
+          "seven_all_length_impossibility_proven": true,
+          "eight_cases": 6,
+          "eight_all_length_impossibility_proven": true,
+          "all_33_targets_have_affine_contradiction_certificates": true,
+          "selector_six_row_closure_size": 20160,
+          "selector_full_permutation_closure_size": 40320,
+          "transport_word_enumeration_complete": false,
+          "minimum_extra_expendable_workspace_bits_for_seven_eight_cases": 1,
+          "configured_runtime_carriers_added": 0,
+          "temporary_research_carriers": 1,
+          "workspace_word_lengths": [
+            27,
+            41,
+            39,
+            49,
+            49,
+            39
           ],
-          "every_prefix_retains_twenty_distinctions": true,
-          "dedicated_workspace_roles": 0,
-          "sixth_research_carrier_used": false,
-          "physical_assignments": 120,
-          "remapping_rows": 2400,
-          "selector_reuse_executions": 40,
-          "separate_process_initializer_count": 5,
-          "separate_process_consumer_count": 40,
-          "flat_native_length": 12,
-          "flat_proved_minimum_interval": [
-            8,
-            12
-          ],
-          "flat_shortest_count": null,
-          "flat_reserved_codes_visited": [
-            1,
-            5,
-            7
-          ],
-          "main_transported_length": 13,
-          "encoding_cost_advantage_established": false,
-          "flat_native_and_transported_real_file_rows": 40,
-          "all_prior_evidence_sections_unchanged": true
+          "workspace_executor_minima_known": false,
+          "all_64_inputs_both_old_W_values_verified_for_each_completion": true,
+          "all_eighteen_seven_cases_verified_by_exact_restriction": true,
+          "five_bit_live_rows": 72,
+          "six_bit_live_rows": 384,
+          "unresolved_extension_classifications": 0
         },
+        "changed_files": [
+          "FOUNDATIONS.md",
+          "composition_experiments.py",
+          "test_composition_experiments.py",
+          "composition_results.json",
+          "validation_results.json"
+        ],
         "previous_research_pass": {
           "date": "2026-10-09",
           "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
           "python_version": "3.14.6",
-          "baseline_tests": 72,
+          "baseline_tests": 82,
           "historical_tests": 40,
           "focused": {
-            "module": "test_composition_experiments.FactorizedSelectionTests",
-            "tests": 10,
+            "module": "test_composition_experiments.PersistentOrderTests",
+            "tests": 13,
             "passed": true,
-            "seconds": 160.669
+            "seconds": 95.926
           },
           "experimental": {
             "module": "test_composition_experiments",
-            "tests": 42,
+            "tests": 55,
             "passed": true,
             "tested_as_part_of_full_suite": true
           },
           "full": {
-            "command": ".venv/Scripts/python.exe -B -m unittest",
-            "tests": 82,
+            "command": ".venv/Scripts/python.exe -B -m unittest -v",
+            "tests": 95,
             "passed": true,
-            "seconds": 214.223
+            "seconds": 329.859
           },
           "historical_runtime_and_test_sha256_unchanged": true,
           "source_sha256": {
             "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
             "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-            "composition_experiments.py": "dda7d2d6dcdd640e566ce4760108351d81dfbfb1578b80fc552e655c6b23b089",
-            "test_composition_experiments.py": "e1bbf81dcf9a6be33919e414faad1eb6553cf158b5ce572e6825d3d80967947a"
+            "composition_experiments.py": "5013f9e291f5131edc0c4454b4d4cfcc6686caee14f3513b9f303d407b79f91a",
+            "test_composition_experiments.py": "ca27cfba9d9d9461a13da456bacbb8fc3b7765d5eb37da68548d019581bc4dc8"
           },
           "pylance": {
             "version": "2026.4.1",
@@ -549,65 +609,102 @@
               "e:\\ArxMentis\\composition_experiments.py": [],
               "e:\\ArxMentis\\test_composition_experiments.py": []
             },
+            "source_hashes_match": true,
             "excluded_non_python_provider": "cSpell informational spelling diagnostics"
           },
           "git_diff_check": true,
           "evidence_artifact_consistency_check": true,
           "new_artifact_trailing_whitespace_check": true,
-          "bytecode_policy": "Explicit -B in all new tests, child processes, and evidence runs; tracked caches unchanged",
+          "artifact_checks": {
+            "all_prior_evidence_sections_unchanged": true,
+            "all_42_prior_experimental_tests_byte_preserved_when_new_class_removed": true,
+            "retained_search_words_replayed_against_runtime_sampled_tables": 4,
+            "every_retained_executor_prefix_verified": true
+          },
+          "bytecode_policy": "Explicit -B for new tests and all child processes; historical tracked caches unchanged",
           "research_solver": {
             "package": "z3-solver",
             "package_version": "4.15.4.0",
             "core_version": "4.15.4",
             "runtime_dependency": false
           },
-          "factorized_selection": {
-            "minimum_executor_length": 7,
-            "minimum_workspace_bits": 1,
-            "total_four_bit_impossibility_proven": true,
-            "five_bit_total_contract": "all 32 inputs; selectors preserved; arbitrary old W discarded; final W=0",
+          "persistent_order": {
+            "configured_carriers": 5,
             "primitive_labels": 225,
             "primitive_tables": 175,
-            "all_24_selector_recodings_realizable": true,
-            "all_24_minimum_lengths_known": false,
-            "main_shortest_count_known": false,
-            "main_retained_canonical": 16,
-            "main_retained_labeled": 396,
-            "flat_comparison_minimum_length": 6,
-            "flat_shortest_canonical": 24,
-            "flat_shortest_labeled": 400,
-            "unrelated_cubic_lookup": "unresolved at timed lengths 7 and 8"
+            "rank_pruned_tables": 85,
+            "selector_representation_lower_bound_bits": 3,
+            "total_target_rank": 32,
+            "total_target_degree": 3,
+            "total_all_length_impossibility_proven": true,
+            "restricted_domain_rows": 20,
+            "executor_length": 11,
+            "executor_minimum_length": null,
+            "proved_minimum_interval": [
+              9,
+              11
+            ],
+            "exact_shortest_word_count": null,
+            "reserved_intermediate_states_necessary_proven": true,
+            "main_reserved_codes_visited": [
+              1,
+              3,
+              5
+            ],
+            "every_prefix_retains_twenty_distinctions": true,
+            "dedicated_workspace_roles": 0,
+            "sixth_research_carrier_used": false,
+            "physical_assignments": 120,
+            "remapping_rows": 2400,
+            "selector_reuse_executions": 40,
+            "separate_process_initializer_count": 5,
+            "separate_process_consumer_count": 40,
+            "flat_native_length": 12,
+            "flat_proved_minimum_interval": [
+              8,
+              12
+            ],
+            "flat_shortest_count": null,
+            "flat_reserved_codes_visited": [
+              1,
+              5,
+              7
+            ],
+            "main_transported_length": 13,
+            "encoding_cost_advantage_established": false,
+            "flat_native_and_transported_real_file_rows": 40,
+            "all_prior_evidence_sections_unchanged": true
           },
           "previous_research_pass": {
             "date": "2026-10-09",
             "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
             "python_version": "3.14.6",
-            "baseline_tests": 60,
+            "baseline_tests": 72,
             "historical_tests": 40,
             "focused": {
-              "module": "test_composition_experiments.MechanismReificationTests",
-              "tests": 12,
+              "module": "test_composition_experiments.FactorizedSelectionTests",
+              "tests": 10,
               "passed": true,
-              "seconds": 24.267
+              "seconds": 160.669
             },
             "experimental": {
               "module": "test_composition_experiments",
-              "tests": 32,
+              "tests": 42,
               "passed": true,
-              "seconds": 52.172
+              "tested_as_part_of_full_suite": true
             },
             "full": {
               "command": ".venv/Scripts/python.exe -B -m unittest",
-              "tests": 72,
+              "tests": 82,
               "passed": true,
-              "seconds": 53.179
+              "seconds": 214.223
             },
             "historical_runtime_and_test_sha256_unchanged": true,
             "source_sha256": {
               "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
               "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-              "composition_experiments.py": "4b35f11662cbe870bff244285e4ce85739a3e739f18d716de9f21f85e57f671c",
-              "test_composition_experiments.py": "ec17f940ee4cd4c9850fbc86502c815c212a0a3666d12d537d0da5d2d87ef576"
+              "composition_experiments.py": "dda7d2d6dcdd640e566ce4760108351d81dfbfb1578b80fc552e655c6b23b089",
+              "test_composition_experiments.py": "e1bbf81dcf9a6be33919e414faad1eb6553cf158b5ce572e6825d3d80967947a"
             },
             "pylance": {
               "version": "2026.4.1",
@@ -625,43 +722,62 @@
               "excluded_non_python_provider": "cSpell informational spelling diagnostics"
             },
             "git_diff_check": true,
+            "evidence_artifact_consistency_check": true,
             "new_artifact_trailing_whitespace_check": true,
-            "bytecode_policy": "Explicit -B used for all follow-up interpreter and child-process runs; tracked caches unchanged",
-            "mechanism_reification": {
-              "total_three_bit_impossibility_proven": true,
+            "bytecode_policy": "Explicit -B in all new tests, child processes, and evidence runs; tracked caches unchanged",
+            "research_solver": {
+              "package": "z3-solver",
+              "package_version": "4.15.4.0",
+              "core_version": "4.15.4",
+              "runtime_dependency": false
+            },
+            "factorized_selection": {
+              "minimum_executor_length": 7,
               "minimum_workspace_bits": 1,
-              "minimum_fixed_executor_length": 6,
-              "canonical_four_bit_basis_tables": 76,
-              "admissible_domain": "all C,A,B; W=0, W restored to 0",
-              "search_max_prefix": 3,
-              "search_max_suffix": 3,
-              "maximum_complete_program_length": 6,
-              "per_direction_table_cap": 500000,
-              "cap_reached": false
+              "total_four_bit_impossibility_proven": true,
+              "five_bit_total_contract": "all 32 inputs; selectors preserved; arbitrary old W discarded; final W=0",
+              "primitive_labels": 225,
+              "primitive_tables": 175,
+              "all_24_selector_recodings_realizable": true,
+              "all_24_minimum_lengths_known": false,
+              "main_shortest_count_known": false,
+              "main_retained_canonical": 16,
+              "main_retained_labeled": 396,
+              "flat_comparison_minimum_length": 6,
+              "flat_shortest_canonical": 24,
+              "flat_shortest_labeled": 400,
+              "unrelated_cubic_lookup": "unresolved at timed lengths 7 and 8"
             },
             "previous_research_pass": {
               "date": "2026-10-09",
-              "python": "E:/ArxMentis/.venv/Scripts/python.exe",
+              "python": "E:\\ArxMentis\\.venv\\Scripts\\python.exe",
               "python_version": "3.14.6",
-              "baseline_tests": 40,
+              "baseline_tests": 60,
+              "historical_tests": 40,
               "focused": {
-                "module": "test_composition_experiments",
-                "tests": 20,
+                "module": "test_composition_experiments.MechanismReificationTests",
+                "tests": 12,
                 "passed": true,
-                "seconds": 30.137
+                "seconds": 24.267
+              },
+              "experimental": {
+                "module": "test_composition_experiments",
+                "tests": 32,
+                "passed": true,
+                "seconds": 52.172
               },
               "full": {
-                "command": ".venv/Scripts/python.exe -m unittest",
-                "tests": 60,
+                "command": ".venv/Scripts/python.exe -B -m unittest",
+                "tests": 72,
                 "passed": true,
-                "seconds": 33.61
+                "seconds": 53.179
               },
               "historical_runtime_and_test_sha256_unchanged": true,
               "source_sha256": {
                 "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
                 "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
-                "composition_experiments.py": "4d448732f562f08dc3f4cb5be933d54d786cc98050e685fc77188b65eca126ef",
-                "test_composition_experiments.py": "2eba5d206a3f476254db15d8cc119086191ce33b9ac76ffb2cac34637db81c90"
+                "composition_experiments.py": "4b35f11662cbe870bff244285e4ce85739a3e739f18d716de9f21f85e57f671c",
+                "test_composition_experiments.py": "ec17f940ee4cd4c9850fbc86502c815c212a0a3666d12d537d0da5d2d87ef576"
               },
               "pylance": {
                 "version": "2026.4.1",
@@ -680,16 +796,72 @@
               },
               "git_diff_check": true,
               "new_artifact_trailing_whitespace_check": true,
-              "bytecode_cleanup": "Only test-generated cache changes reverted; historical tracked caches preserved"
+              "bytecode_policy": "Explicit -B used for all follow-up interpreter and child-process runs; tracked caches unchanged",
+              "mechanism_reification": {
+                "total_three_bit_impossibility_proven": true,
+                "minimum_workspace_bits": 1,
+                "minimum_fixed_executor_length": 6,
+                "canonical_four_bit_basis_tables": 76,
+                "admissible_domain": "all C,A,B; W=0, W restored to 0",
+                "search_max_prefix": 3,
+                "search_max_suffix": 3,
+                "maximum_complete_program_length": 6,
+                "per_direction_table_cap": 500000,
+                "cap_reached": false
+              },
+              "previous_research_pass": {
+                "date": "2026-10-09",
+                "python": "E:/ArxMentis/.venv/Scripts/python.exe",
+                "python_version": "3.14.6",
+                "baseline_tests": 40,
+                "focused": {
+                  "module": "test_composition_experiments",
+                  "tests": 20,
+                  "passed": true,
+                  "seconds": 30.137
+                },
+                "full": {
+                  "command": ".venv/Scripts/python.exe -m unittest",
+                  "tests": 60,
+                  "passed": true,
+                  "seconds": 33.61
+                },
+                "historical_runtime_and_test_sha256_unchanged": true,
+                "source_sha256": {
+                  "arxmentis.py": "94ad41dcc6c6d679b6d4056ecfe1ebeba4108b62dab2d6eef414eb6815ff360f",
+                  "test_arxmentis.py": "0146544f9964131cc5101dbc244e616cccc76a835b2c9388a5bc60538cae2a3b",
+                  "composition_experiments.py": "4d448732f562f08dc3f4cb5be933d54d786cc98050e685fc77188b65eca126ef",
+                  "test_composition_experiments.py": "2eba5d206a3f476254db15d8cc119086191ce33b9ac76ffb2cac34637db81c90"
+                },
+                "pylance": {
+                  "version": "2026.4.1",
+                  "host": "installed Microsoft Visual Studio Code",
+                  "type_checking_mode": "basic",
+                  "interpreter": "E:/ArxMentis/.venv/Scripts/python.exe",
+                  "readiness_hover_counts": [
+                    1,
+                    1
+                  ],
+                  "diagnostics": {
+                    "e:\\ArxMentis\\composition_experiments.py": [],
+                    "e:\\ArxMentis\\test_composition_experiments.py": []
+                  },
+                  "excluded_non_python_provider": "cSpell informational spelling diagnostics"
+                },
+                "git_diff_check": true,
+                "new_artifact_trailing_whitespace_check": true,
+                "bytecode_cleanup": "Only test-generated cache changes reverted; historical tracked caches preserved"
+              }
             }
-          }
-        },
-        "discarded_group_exploration_unused_packages_removed": [
-          "sympy",
-          "mpmath"
-        ]
+          },
+          "discarded_group_exploration_unused_packages_removed": [
+            "sympy",
+            "mpmath"
+          ]
+        }
       }
-    }
+    },
+    "previous_validation_sha256": "51a1f89f2db80aa1fa961a5343599aa86b85566101e1b0127e7ca9002de9ea31"
   },
-  "previous_validation_sha256": "51a1f89f2db80aa1fa961a5343599aa86b85566101e1b0127e7ca9002de9ea31"
+  "previous_validation_sha256": "267761e6e922a00f3bfbc429349cce2f09ac093e189db15d996b97f207fc74e4"
 }

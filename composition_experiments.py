@@ -2276,6 +2276,325 @@ def semantic_length_experiment() -> dict[str, object]:
         "preserved_previous_sections_sha256": {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
             for key, value in previous.items() if key not in ("scope", "semantic_length")}}
 
+
+
+def cursor_step_target(alphabet: tuple[Table, Table], workspace: bool = True) -> Table:
+    """Complete common-alphabet contract; cursor advances and old W is expendable."""
+    result = []
+    for state in states(6 if workspace else 5):
+        c, p0, p1, a, b = state[:5]
+        data = alphabet[(p0, p1)[c]][2 * a + b]
+        output = ((c ^ 1) << 4) | (p0 << 3) | (p1 << 2) | data
+        result.append(2 * output if workspace else output)
+    return tuple(result)
+
+
+def cursor_step_executor(recoding: str = "native") -> tuple[Operation, ...]:
+    """Fixed externally retained research word; no cursor inspection or dispatch."""
+    if recoding not in ("native", "instructions", "cursor"):
+        raise ValueError("Declare native, instruction or cursor encoding")
+    selection_roles = (0, 1, 2, 5)
+    selection_support = (recoded_swap_workspace_program() if recoding == "cursor"
+                         else selected_swap_workspace_program())
+    selection = tuple((kind, tuple(selection_roles[i] for i in roles))
+                      for kind, roles in selection_support)
+    decoder_roles = (1, 3, 4, 5)
+    decoder = tuple((kind, tuple(decoder_roles[i] for i in roles))
+                    for kind, roles in stored_instruction_executor(recoding == "instructions"))
+    native = selection + decoder + selection + (("toggle", (0,)),)
+    return native
+
+
+def cursor_step_trajectory(word: Sequence[Operation], sampled: dict[Operation, Table],
+                           clean_workspace: bool = True) -> list[dict[str, object]]:
+    """Retain required32 clean-W classes separately from expendable old-W pairs."""
+    initial = tuple(range(0, 64, 2)) if clean_workspace else tuple(range(64))
+    trace = subset_trajectory(6, initial, word, sampled, ())
+    for row in trace:
+        outputs = cast(Table, row["ordered_outputs"])
+        reached = cast(Table, row["reachable_set"])
+        op = cast(Operation | None, row["next_operation"])
+        row["program_bits_preserved"] = all((a & 24) == (b & 24)
+                                              for a, b in zip(initial, outputs, strict=True))
+        row["cursor_value_distribution"] = [sum((i >> 5) == c for i in reached) for c in (0, 1)]
+        row["workspace_values"] = sorted({i & 1 for i in reached})
+        row["next_globally_noninjective"] = len(set(sampled[op])) < 64 if op is not None else None
+    return trace
+
+
+def cursor_external_selection_control(initial: State, paths: Sequence[Path]) -> State:
+    """Assistance-accounting control: Python reads C and branches on active path."""
+    for v, p in zip(initial, paths, strict=True):
+        runtime.write_state(v, p)
+    active = 1 if runtime.read_state(paths[0]) == 0 else 2
+    roles = (active, 3, 4, 5)
+    for kind, indices in stored_instruction_executor():
+        apply_operation((kind, tuple(roles[i] for i in indices)), paths)
+    runtime.toggle_state(paths[0])
+    return tuple(runtime.read_state(p) for p in paths)
+
+
+def search_cursor_step(target: Table) -> dict[str, object]:
+    """Independent increasing-length full-target search; clean relaxation is explicit."""
+    records = []
+    found: list[tuple[Operation, ...]] = []
+    for length in range(13):
+        timeout = 5_000 if length < 6 else 20_000 if length < 9 else 40_000
+        words, record = symbolic_program_search(6, tuple(range(64)), target, length,
+            enumerate_all=False, timeout_ms=timeout, wall_seconds=timeout / 1000 + 1)
+        records.append(record)
+        found.extend(words)
+        print(f"cursor whole-target search: {length} calls {record['status']}", flush=True)
+        if words:
+            break
+    relaxed = []
+    clean = tuple(range(0, 64, 2))
+    for length in range(6, 10):
+        if any(r["length"] == length and r["status"] == "unsat" for r in records):
+            continue
+        if found and min(map(len, found)) <= length:
+            break
+        words, record = symbolic_program_search(6, clean, tuple(target[i] for i in clean), length,
+            enumerate_all=False, timeout_ms=20_000, wall_seconds=21,
+            incremental_rows=True, injective_prefixes=True)
+        valid = [word for word in words if sample_program(6, word) == target]
+        found.extend(valid)
+        relaxed.append({"record": record, "words": words, "full64_valid_words": valid})
+        print(f"cursor clean-W relaxation: {length} calls {record['status']}", flush=True)
+    return {"records": records, "clean_workspace_relaxation": relaxed, "full_target_words": found,
+            "full_target_rows": 64, "clean_relaxation_rows": 32,
+            "maximum_length_full_search": 12, "maximum_length_relaxation": 9,
+            "all_shortest_enumeration": False, "stored_word_cap_per_query": 1}
+
+
+def cursor_step_experiment() -> dict[str, object]:
+    """Actual-file interventions, continuation and maps, with external grammar accounting."""
+    import subprocess
+    import sys
+    import time
+    root = Path(__file__).resolve().parent
+    previous = json.loads((root / "composition_results.json").read_text(encoding="utf-8"))
+    alphabet = semantic_length_alphabet()
+    target = cursor_step_target(alphabet)
+    modular = cursor_step_executor()
+    assert len(modular) == 20 and sample_program(6, modular) == target
+    raw_ops = role_complete_basis(6)
+    raw = sample_basis(6, raw_ops)
+    basis, aliases = canonical_basis(raw)
+    sampled = {raw_ops[name]: table for name, table in raw.items()}
+    searches = search_cursor_step(target)
+    candidates = cast(list[tuple[Operation, ...]], searches["full_target_words"]) + [modular]
+    shortest = min(candidates, key=lambda word: (len(word), word))
+    assert sample_program(6, shortest) == target
+    negatives = {cast(int, r["length"]) for r in cast(list[dict[str, object]], searches["records"])
+                 if r["status"] == "unsat"}
+    for row in cast(list[dict[str, object]], searches["clean_workspace_relaxation"]):
+        record = cast(dict[str, object], row["record"])
+        if record["status"] == "unsat":
+            negatives.add(cast(int, record["length"]))
+    lower = 0
+    while lower in negatives:
+        lower += 1
+    words = {"modular": modular, "global_shortest_found": shortest,
+             "instructions_recoded": cursor_step_executor("instructions"),
+             "cursor_recoded": cursor_step_executor("cursor")}
+    cursor_flip: tuple[Operation, ...] = (("toggle", (0,)),)
+    conjugated_cursor = cursor_flip + modular + cursor_flip
+    assert sample_program(6, conjugated_cursor) == tuple(32 ^ target[32 ^ i] for i in range(64))
+    actual = {name: sample_program(6, word) for name, word in words.items()}
+    assert actual["modular"] == actual["global_shortest_found"] == target
+    for name, mask in (("instructions_recoded", 24), ("cursor_recoded", 32)):
+        transported = tuple(mask ^ target[mask ^ i] for i in range(64))
+        assert actual[name] == transported
+    trajectories = {name: {"required32": cursor_step_trajectory(word, sampled),
+                            "both_old_W": cursor_step_trajectory(word, sampled, False)}
+                    for name, word in words.items()}
+    for pair in trajectories.values():
+        assert all(row["cardinality"] == 32 for row in pair["required32"])
+        assert all(row["next_is_injective"] for row in pair["required32"][:-1])
+    checkpoints = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for initial in states(6):
+            execute(initial, (), paths)
+            saved = tuple(p.read_bytes() for p in paths[1:3])
+            stages = []
+            for part in (modular[:6], modular[6:13], modular[13:19], modular[19:]):
+                for op in part:
+                    apply_operation(op, paths)
+                stages.append(tuple(runtime.read_state(p) for p in paths))
+            c, p0, p1, a, b, _ = initial
+            active, inactive = (p0, p1) if c == 0 else (p1, p0)
+            d = alphabet[active][2 * a + b]
+            assert stages[0] == (c, active, inactive, a, b, 0)
+            assert stages[1] == (c, active, inactive, d >> 1, d & 1, 0)
+            assert stages[2] == (c, p0, p1, d >> 1, d & 1, 0)
+            assert stages[3] == (c ^ 1, p0, p1, d >> 1, d & 1, 0)
+            assert tuple(p.read_bytes() for p in paths[1:3]) == saved
+            checkpoints.append({"input": initial, "after_selection6": stages[0],
+                "after_decoder13": stages[1], "after_restore19": stages[2], "after_advance20": stages[3]})
+    # Interventions edit one persistent file, retaining the remaining initial values.
+    interventions = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for initial in states(6):
+            for changed in (0, 1 if initial[0] == 1 else 2, 1 if initial[0] == 0 else 2):
+                before = execute(initial, modular, paths)
+                execute(initial, (), paths)
+                saved = tuple(p.read_bytes() for p in paths)
+                runtime.toggle_state(paths[changed])
+                assert all(p.read_bytes() == saved[j] for j, p in enumerate(paths) if j != changed)
+                modified = tuple(runtime.read_state(p) for p in paths)
+                for op in modular:
+                    apply_operation(op, paths)
+                after = tuple(runtime.read_state(p) for p in paths)
+                assert after == states(6)[target[states(6).index(modified)]]
+                inactive_edit = changed != 0 and changed != (1 if initial[0] == 0 else 2)
+                if inactive_edit:
+                    assert before[3:5] == after[3:5] and before[0] == after[0]
+                interventions.append({"initial": initial, "changed_role": changed,
+                    "modified_initial": modified, "before": before, "after": after,
+                    "inactive_slot": inactive_edit, "other_initial_bytes_preserved": True})
+    two_steps = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for initial in states(6):
+            mid = execute(initial, modular, paths)
+            saved = tuple(p.read_bytes() for p in paths[1:3])
+            for op in modular:  # Identical word, with no intervening cursor rewrite.
+                apply_operation(op, paths)
+            final = tuple(runtime.read_state(p) for p in paths)
+            c, p0, p1, a, b, _ = initial
+            d = compose(alphabet[(p0, p1)[c]], alphabet[(p0, p1)[1 - c]])[2 * a + b]
+            assert final == (c, p0, p1, d >> 1, d & 1, 0)
+            assert tuple(p.read_bytes() for p in paths[1:3]) == saved
+            two_steps.append({"input": initial, "after_STEP": mid, "after_same_STEP_again": final,
+                              "cursor_rewritten_between": False, "program_bytes_preserved": True})
+    first_process = (
+        "from pathlib import Path; import sys,json,composition_experiments as r; "
+        "p=tuple(Path(s) for s in sys.argv[7:]); "
+        "[r.runtime.write_state(int(v),q) for v,q in zip(sys.argv[1:7],p)]; "
+        "saved=tuple(q.read_bytes() for q in p[1:3]); "
+        "[r.apply_operation(op,p) for op in r.cursor_step_executor()]; "
+        "assert tuple(q.read_bytes() for q in p[1:3])==saved; "
+        "print(json.dumps(tuple(r.runtime.read_state(q) for q in p)))")
+    continuation = (
+        "from pathlib import Path; import sys,composition_experiments as r; "
+        "p=tuple(Path(s) for s in sys.argv[1:]); "
+        "[r.apply_operation(op,p) for op in r.cursor_step_executor()]")
+    process_rows = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for p0, p1, a, b, w in states(5):
+            initial = (0, p0, p1, a, b, w)
+            first = subprocess.run([sys.executable, "-B", "-c", first_process,
+                *(str(v) for v in initial), *(str(p) for p in paths)], cwd=root,
+                check=True, capture_output=True, text=True)
+            middle = tuple(json.loads(first.stdout))
+            assert middle == states(6)[target[states(6).index(initial)]]
+            saved = tuple(p.read_bytes() for p in paths[1:3])
+            subprocess.run([sys.executable, "-B", "-c", continuation, *(str(p) for p in paths)],
+                           cwd=root, check=True, capture_output=True)
+            final = tuple(runtime.read_state(p) for p in paths)
+            d = compose(alphabet[p0], alphabet[p1])[2 * a + b]
+            assert final == (0, p0, p1, d >> 1, d & 1, 0)
+            assert tuple(p.read_bytes() for p in paths[1:3]) == saved
+            process_rows.append({"input": initial, "after_process_A": middle, "after_process_B": final,
+                                 "continuation_arguments": "carrier paths only; no cursor or slot instruction",
+                                 "program_bytes_preserved": True})
+    remapping_count = 0
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory() as directory:
+        physical = tuple(Path(directory) / name for name in (".arxmentis-state", ".arxmentis-state-2",
+            ".arxmentis-memory", ".arxmentis-policy", ".arxmentis-policy-1"))
+        workspace = Path(directory) / "W-research-only"
+        for assignment in permutations(physical):
+            paths = (*assignment, workspace)
+            for i, initial in enumerate(states(6)):
+                assert execute(initial, modular, paths) == states(6)[target[i]]
+                remapping_count += 1
+    remapping_seconds = time.perf_counter() - started
+    # Optional stronger mapping has a declared measured-cost gate, never an absence claim.
+    estimated_six_seconds = remapping_seconds * 3  # 720*32 compared with120*64.
+    full_six_rows = 0
+    six_cap = 180.0
+    if estimated_six_seconds <= six_cap:
+        with tempfile.TemporaryDirectory() as directory:
+            physical = tuple(Path(directory) / f"physical-{j}" for j in range(6))
+            for paths in permutations(physical):
+                for i in range(0, 64, 2):
+                    assert execute(states(6)[i], modular, paths) == states(6)[target[i]]
+                    full_six_rows += 1
+    recoding_rows = []
+    with tempfile.TemporaryDirectory() as directory:
+        paths = tuple(Path(directory) / str(i) for i in range(6))
+        for name, mask in (("instructions_recoded", 24), ("cursor_recoded", 32)):
+            for i, state in enumerate(states(6)):
+                output = execute(state, words[name], paths)
+                assert output == states(6)[mask ^ target[mask ^ i]]
+                recoding_rows.append({"map": name, "input": state, "output": output})
+        # Carrier-role transport is separate from editing contents at fixed logical roles.
+        slot_roles = (0, 2, 1, 3, 4, 5)
+        transported_word = tuple((kind, tuple(slot_roles[j] for j in roles)) for kind, roles in modular)
+        for i, initial in enumerate(states(6)):
+            physical_initial = tuple(initial[j] for j in slot_roles)
+            output = execute(physical_initial, transported_word, paths)
+            expected = tuple(states(6)[target[i]][j] for j in slot_roles)
+            assert output == expected
+        controls = tuple(states(6).index(cursor_external_selection_control(state, paths)) for state in states(6))
+        assert controls == target
+    five_target = cursor_step_target(alphabet, False)
+    raw5 = sample_basis(5, role_complete_basis(5))
+    assert len(set(five_target)) == 32 and not is_affine(five_target)
+    assert all(is_affine(t) for t in raw5.values() if len(set(t)) == 32)
+    return {"roles": ["C", "P0", "P1", "A", "B", "W"], "alphabet": alphabet,
+        "target": target, "properties": table_properties(target),
+        "intentionally_discarded": "only old W: each output has exactly the pair of inputs differing only in W",
+        "raw_basis_calls": len(raw), "unique_basis_tables": len(basis), "basis_aliases": aliases,
+        "canonical_basis": basis, "modular_word": modular, "modular_calls": 20,
+        "modular_stage_cuts": [6, 13, 19, 20], "modular_stage_rows": checkpoints,
+        "global_word": shortest, "global_calls": len(shortest), "global_lower_bound": lower,
+        "global_minimum": len(shortest) if lower == len(shortest) else None,
+        "global_shortest_word_count": None,
+        "global_unresolved_lengths": [n for n in range(lower, len(shortest)) if n not in negatives],
+        "global_search": searches, "global_compression_found": len(shortest) < 20,
+        "equivalence_boundary": "complete final persistent64-state table; modular intermediate cuts separately observed",
+        "interventions": interventions, "two_identical_steps": two_steps,
+        "process_continuation": {"rows": process_rows, "process_A_count": len(process_rows),
+            "process_B_count": len(process_rows), "same_executor": True, "no_cursor_rewrite_between": True},
+        "trajectories": trajectories,
+        "physical_remapping": {"configured_role_assignments": 120, "full64_rows": remapping_count,
+            "seconds": round(remapping_seconds, 3), "word": "modular",
+            "full_six_assignments": 720 if full_six_rows else 0, "full_six_clean_W_rows": full_six_rows,
+            "optional_estimated_seconds": round(estimated_six_seconds, 3), "optional_estimated_cost_cap_seconds": six_cap,
+            "optional_status": "completed all720 assignments on32 clean-W inputs" if full_six_rows else "not run: estimated cost exceeds declared180-second optional budget"},
+        "recodings": {"instruction_mask": 24, "cursor_mask": 32, "actual_rows": recoding_rows,
+            "instructions_word": words["instructions_recoded"], "instructions_upper_bound": len(words["instructions_recoded"]),
+            "cursor_word": words["cursor_recoded"], "cursor_upper_bound": len(words["cursor_recoded"]),
+            "cursor_conjugated_word": conjugated_cursor, "cursor_conjugated_upper_bound": 22,
+            "minimums": None, "role_transport_rows": 64,
+            "slot_role_permutation": [0, 2, 1, 3, 4, 5],
+            "distinction": "transport carriers+word; edit contents alone changes active instruction; cursor complement transports target and meaning"},
+        "external_selection_control": {"target": controls, "rows": 64, "cursor_read_by_Python": True,
+            "slot_path_chosen_by_Python": True, "cursor_advanced_in_control_protocol": True,
+            "decoder_calls": 7, "advance_calls": 1, "total_primitive_calls": 8,
+            "internal_STEP_harness_branch": False, "classification": "external assistance control, not a substrate capability"},
+        "five_without_workspace": {"target": five_target, "properties": table_properties(five_target),
+            "all_length_impossible": True, "proof": "nonaffine total bijection; rank loss cannot be recovered and every bijective primitive is affine"},
+        "configured_carriers_added": 0, "minimum_extra_binary_capacity": 1,
+        "earned": "Persistent execution state identifies one of two stored positions; a fixed reusable STEP consumes its common instruction, preserves the program and advances to the other position. Repeated identical invocations implement the stored two-slot word, with continuation across process death.",
+        "external_contributions": {"carrier": "five configured capacities assignedC/P0/P1/A/B plus temporary expendableW and filesystem persistence",
+            "law": "unchanged existing low-level equations; all composed support retained",
+            "representation": "exactly two position meanings, fixedX/R alphabet and roles, recoding maps",
+            "sequencing": "external search/construction and retainedSTEP word; Python invokes STEP and chooses invocation count, without cursor dispatch",
+            "environment": "initialization, data writes, file paths, process lifetimes and interventions",
+            "evaluator": "full64 composition-derived target, intermediate selection/decoder/restoration cuts, interventions and continuation"},
+        "unearned": ["DONE", "termination", "program length combined with cursor", "variable slots", "arbitrary addressing",
+            "jumps", "branches", "loop instruction", "stack", "autonomous STEP invocation", "endogenous program generation", "general interpreter", "self modification"],
+        "next_boundary": "SLOT0/SLOT1/DONE persistent execution state, before recombining variable length; not implemented",
+        "preserved_previous_sections_sha256": {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+            for key, value in previous.items() if key not in ("scope", "persistent_cursor")}}
+
 def run_experiments() -> dict[str, object]:
     b2 = sample_basis(2, two_bit_basis())
     b3_ops = three_bit_basis()
@@ -2399,6 +2718,8 @@ def run_experiments() -> dict[str, object]:
     retained_factorized = (json.loads(result_path.read_text(encoding="utf-8")).get("factorized_selection")
                            if result_path.exists() else None)
     return {
+        "persistent_cursor": (json.loads(result_path.read_text(encoding="utf-8")).get("persistent_cursor")
+                            if result_path.exists() else None),
         "semantic_length": (json.loads(result_path.read_text(encoding="utf-8")).get("semantic_length")
                             if result_path.exists() else None),
         "stored_sequence": (json.loads(result_path.read_text(encoding="utf-8")).get("stored_sequence")
@@ -2476,8 +2797,13 @@ def main() -> None:
                         help="Recompute bounded fixed-length stored-sequence searches and runtime evidence")
     parser.add_argument("--length-experiment", action="store_true",
                         help="Recompute stored semantic length proof, separate searches and actual-file evidence")
+    parser.add_argument("--cursor-experiment", action="store_true",
+                        help="Recompute persistent execution cursor searches and actual-file support")
     args = parser.parse_args()
-    if args.length_experiment:
+    if args.cursor_experiment:
+        result = json.loads(Path(__file__).with_name("composition_results.json").read_text(encoding="utf-8"))
+        result["persistent_cursor"] = cursor_step_experiment()
+    elif args.length_experiment:
         # Append evidence without recomputing or changing any earlier section.
         result = json.loads(Path(__file__).with_name("composition_results.json").read_text(encoding="utf-8"))
         result["semantic_length"] = semantic_length_experiment()

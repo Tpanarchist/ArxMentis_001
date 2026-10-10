@@ -1338,5 +1338,273 @@ class SemanticLengthTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(json.dumps(artifact[key], sort_keys=True).encode()).hexdigest(), sha)
 
 
+class PersistentCursorTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.evidence = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))["persistent_cursor"]
+        cls.alphabet = research.semantic_length_alphabet()
+        cls.target = research.cursor_step_target(cls.alphabet)
+        cls.word = research.cursor_step_executor()
+
+    def test_alphabet_unchanged_and_complete_target_composed_independently(self) -> None:
+        self.assertEqual(self.alphabet, ((2, 3, 0, 1), (1, 3, 0, 2)))
+        self.assertEqual(len(self.target), 64)
+        for i, state in enumerate(research.states(6)):
+            c, p0, p1, a, b, _ = state
+            d = self.alphabet[p0 if c == 0 else p1][2 * a + b]
+            self.assertEqual(research.states(6)[self.target[i]], (1 - c, p0, p1, d >> 1, d & 1, 0))
+        self.assertEqual(tuple(self.evidence["target"]), self.target)
+
+    def test_rank32_discards_exactly_old_workspace(self) -> None:
+        self.assertEqual(len(set(self.target)), 32)
+        preimages = {output: tuple(i for i, value in enumerate(self.target) if value == output)
+                     for output in set(self.target)}
+        self.assertTrue(all(len(pair) == 2 and pair[0] ^ pair[1] == 1 for pair in preimages.values()))
+        self.assertFalse(research.is_affine(self.target))
+        self.assertEqual(research.algebraic_normal_form(self.target)["degree"], 3)
+        self.assertEqual(research.algebraic_normal_form(self.target)["degrees"], [1, 1, 1, 3, 3, 0])
+
+    def test_modular20_word_matches_every_physical_input(self) -> None:
+        self.assertEqual(len(self.word), 20)
+        self.assertEqual(research.sample_program(6, self.word), self.target)
+        self.assertEqual(self.evidence["modular_stage_cuts"], [6, 13, 19, 20])
+
+    def test_actual_modular_selection_decode_restore_advance_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            for initial in research.states(6):
+                research.execute(initial, (), paths)
+                saved = tuple(p.read_bytes() for p in paths[1:3])
+                stages = []
+                for part in (self.word[:6], self.word[6:13], self.word[13:19], self.word[19:]):
+                    for op in part:
+                        research.apply_operation(op, paths)
+                    stages.append(tuple(runtime.read_state(p) for p in paths))
+                c, p0, p1, a, b, _ = initial
+                active, inactive = (p0, p1) if c == 0 else (p1, p0)
+                d = self.alphabet[active][2 * a + b]
+                self.assertEqual(stages[0], (c, active, inactive, a, b, 0))
+                self.assertEqual(stages[1], (c, active, inactive, d >> 1, d & 1, 0))
+                self.assertEqual(stages[2], (c, p0, p1, d >> 1, d & 1, 0))
+                self.assertEqual(stages[3], (1 - c, p0, p1, d >> 1, d & 1, 0))
+                self.assertEqual(tuple(p.read_bytes() for p in paths[1:3]), saved)
+
+    def test_inactive_slot_edit_on_real_files_is_irrelevant_to_step_data(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            for initial in research.states(6):
+                baseline = research.execute(initial, self.word, paths)
+                research.execute(initial, (), paths)
+                changed = 2 if initial[0] == 0 else 1
+                saved = tuple(p.read_bytes() for p in paths)
+                runtime.toggle_state(paths[changed])
+                self.assertTrue(all(p.read_bytes() == saved[j] for j, p in enumerate(paths) if j != changed))
+                for op in self.word:
+                    research.apply_operation(op, paths)
+                actual = tuple(runtime.read_state(p) for p in paths)
+                self.assertEqual(actual[3:5], baseline[3:5])
+                self.assertEqual(actual[0], baseline[0])
+                self.assertEqual(actual[changed], 1 - initial[changed])
+
+    def test_cursor_only_intervention_selects_active_meaning(self) -> None:
+        rows = [r for r in self.evidence["interventions"] if r["changed_role"] == 0]
+        self.assertEqual(len(rows), 64)
+        for row in rows:
+            c, p0, p1, a, b, _ = row["initial"]
+            first = self.alphabet[(p0, p1)[c]][2 * a + b]
+            second = self.alphabet[(p0, p1)[1 - c]][2 * a + b]
+            self.assertEqual(row["before"][3:5], [first >> 1, first & 1])
+            self.assertEqual(row["after"][3:5], [second >> 1, second & 1])
+            self.assertEqual(row["before"][0], 1 - c)
+            self.assertEqual(row["after"][0], c)
+            self.assertTrue(row["other_initial_bytes_preserved"])
+        # X and R coincide on some data inputs; intervention need not always change data.
+        self.assertTrue(any(r["before"][3:5] != r["after"][3:5] for r in rows))
+
+    def test_active_instruction_substitution_uses_same_alphabet(self) -> None:
+        active = [r for r in self.evidence["interventions"] if r["changed_role"] != 0 and not r["inactive_slot"]]
+        self.assertEqual(len(active), 64)
+        for row in active:
+            c, p0, p1, a, b, _ = row["initial"]
+            d = self.alphabet[1 - (p0, p1)[c]][2 * a + b]
+            self.assertEqual(row["after"][3:5], [d >> 1, d & 1])
+
+    def test_program_preserved_after_each_step_and_cursor_always_advances(self) -> None:
+        for row in self.evidence["two_identical_steps"]:
+            initial, middle, final = row["input"], row["after_STEP"], row["after_same_STEP_again"]
+            self.assertEqual(middle[1:3], initial[1:3])
+            self.assertEqual(final[1:3], initial[1:3])
+            self.assertEqual(middle[0], 1 - initial[0])
+            self.assertEqual(final[0], initial[0])
+            self.assertTrue(row["program_bytes_preserved"])
+            self.assertFalse(row["cursor_rewritten_between"])
+
+    def test_same_word_twice_has_previous_two_slot_semantics_without_state_rewrites(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            for i in range(32):
+                initial = research.states(6)[i]
+                mid = research.execute(initial, self.word, paths)
+                for op in self.word:
+                    research.apply_operation(op, paths)
+                final = tuple(runtime.read_state(p) for p in paths)
+                _, p0, p1, a, b, _ = initial
+                d = research.compose(self.alphabet[p0], self.alphabet[p1])[2 * a + b]
+                self.assertEqual(mid[0], 1)
+                self.assertEqual(final, (0, p0, p1, d >> 1, d & 1, 0))
+
+    def test_fresh_process_continuation_requires_only_paths_and_step(self) -> None:
+        rows = self.evidence["process_continuation"]["rows"]
+        self.assertEqual(len(rows), 32)
+        self.assertEqual(self.evidence["process_continuation"]["process_A_count"], 32)
+        self.assertEqual(self.evidence["process_continuation"]["process_B_count"], 32)
+        for row in rows:
+            _, p0, p1, a, b, _ = row["input"]
+            d0 = self.alphabet[p0][2 * a + b]
+            d1 = self.alphabet[p1][d0]
+            self.assertEqual(row["after_process_A"], [1, p0, p1, d0 >> 1, d0 & 1, 0])
+            self.assertEqual(row["after_process_B"], [0, p0, p1, d1 >> 1, d1 & 1, 0])
+            self.assertIn("no cursor or slot", row["continuation_arguments"])
+            self.assertTrue(row["program_bytes_preserved"])
+
+    def test_repetitions_have_separate_instruction_results(self) -> None:
+        rows = self.evidence["two_identical_steps"]
+        for row in rows:
+            c, p0, p1, a, b, _ = row["input"]
+            if c == 0 and p0 == p1:
+                first = self.alphabet[p0][2 * a + b]
+                second = self.alphabet[p0][first]
+                self.assertEqual(row["after_STEP"][3:5], [first >> 1, first & 1])
+                self.assertEqual(row["after_same_STEP_again"][3:5], [second >> 1, second & 1])
+        self.assertEqual(research.compose(self.alphabet[0], self.alphabet[0]), (0, 1, 2, 3))
+        self.assertEqual(research.compose(self.alphabet[1], self.alphabet[1]), (3, 2, 1, 0))
+
+    def test_mixed_order_depends_on_stored_contents_and_cursor_cycle(self) -> None:
+        xr = research.compose(self.alphabet[0], self.alphabet[1])
+        rx = research.compose(self.alphabet[1], self.alphabet[0])
+        self.assertNotEqual(xr, rx)
+        self.assertEqual(xr, (0, 2, 1, 3))
+        self.assertEqual(rx, (3, 1, 2, 0))
+
+    def test_starting_cursor1_consumes_slot1_first(self) -> None:
+        for row in self.evidence["two_identical_steps"]:
+            c, p0, p1, a, b, _ = row["input"]
+            if c == 1:
+                d = self.alphabet[p1][2 * a + b]
+                self.assertEqual(row["after_STEP"], [0, p0, p1, d >> 1, d & 1, 0])
+                final = self.alphabet[p0][d]
+                self.assertEqual(row["after_same_STEP_again"], [1, p0, p1, final >> 1, final & 1, 0])
+
+    def test_repeated_invocation_is_cursor_cycle_without_done_or_halt(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            research.execute((0, 0, 1, 0, 0, 1), (), paths)
+            for count in range(1, 7):
+                for op in self.word:
+                    research.apply_operation(op, paths)
+                self.assertEqual(runtime.read_state(paths[0]), count % 2)
+        self.assertIn("DONE", self.evidence["unearned"])
+        self.assertEqual(self.evidence["configured_carriers_added"], 0)
+
+    def test_every_required_prefix_is_injective_despite_global_rank_loss(self) -> None:
+        for pair in self.evidence["trajectories"].values():
+            for row in pair["required32"]:
+                self.assertEqual(row["cardinality"], 32)
+                self.assertEqual(sum(row["cursor_value_distribution"]), 32)
+                if row["next_operation"] is not None:
+                    self.assertTrue(row["next_is_injective"])
+            self.assertEqual(pair["both_old_W"][0]["cardinality"], 64)
+            self.assertEqual(pair["both_old_W"][-1]["cardinality"], 32)
+            self.assertEqual(pair["required32"][-1]["workspace_values"], [0])
+        # Program contents may be exchanged during modular selection but are restored at STEP exit.
+        self.assertTrue(self.evidence["trajectories"]["modular"]["required32"][-1]["program_bits_preserved"])
+
+    def test_whole_target_search_bounds_are_honest_and_witness_replays(self) -> None:
+        word = tuple((kind, tuple(roles)) for kind, roles in self.evidence["global_word"])
+        self.assertEqual(research.sample_program(6, word), self.target)
+        self.assertLessEqual(self.evidence["global_lower_bound"], len(word))
+        for record in self.evidence["global_search"]["records"]:
+            self.assertEqual(record["domain_rows"], 64)
+            self.assertFalse(record["boundary_required"])
+            if record["status"] == "unknown":
+                self.assertTrue(record["unknown_reason"])
+        if self.evidence["global_minimum"] is not None:
+            self.assertEqual(self.evidence["global_lower_bound"], len(word))
+        self.assertEqual(self.evidence["global_compression_found"], len(word) < 20)
+
+    def test_complete_six_role_basis_and_aliases_are_runtime_grounded(self) -> None:
+        raw = research.sample_basis(6, research.role_complete_basis(6))
+        basis, aliases = research.canonical_basis(raw)
+        self.assertEqual(len(raw), 426)
+        self.assertEqual(len(basis), 336)
+        self.assertEqual({name: tuple(table) for name, table in self.evidence["canonical_basis"].items()}, basis)
+        self.assertEqual(self.evidence["basis_aliases"], aliases)
+
+    def test_all_configured_physical_remappings_and_optional_budget_are_explicit(self) -> None:
+        mapping = self.evidence["physical_remapping"]
+        self.assertEqual(mapping["configured_role_assignments"], 120)
+        self.assertEqual(mapping["full64_rows"], 7680)
+        if mapping["full_six_assignments"]:
+            self.assertEqual(mapping["full_six_assignments"], 720)
+            self.assertEqual(mapping["full_six_clean_W_rows"], 23040)
+        else:
+            self.assertGreater(mapping["optional_estimated_seconds"], mapping["optional_estimated_cost_cap_seconds"])
+
+    def test_instruction_and_cursor_recoding_have_separate_conjugate_targets(self) -> None:
+        for name, mask in (("instructions", 24), ("cursor", 32)):
+            actual = research.sample_program(6, research.cursor_step_executor(name))
+            self.assertEqual(actual, tuple(mask ^ self.target[mask ^ i] for i in range(64)))
+        self.assertEqual(len(self.evidence["recodings"]["actual_rows"]), 128)
+
+    def test_cursor_recoding_slot_role_swap_and_content_edit_are_distinct(self) -> None:
+        roles = (0, 2, 1, 3, 4, 5)
+        transported = tuple((kind, tuple(roles[i] for i in indices)) for kind, indices in self.word)
+        table = research.sample_program(6, transported)
+        self.assertEqual(table, research.sample_program(6, research.cursor_step_executor("cursor")))
+        # Same endpoint under these symmetric transports does not make the maps identical.
+        domain = research.states(6)
+        cursor_map = tuple(i ^ 32 for i in range(64))
+        slot_map = tuple(domain.index(tuple(state[j] for j in roles)) for state in domain)
+        self.assertNotEqual(cursor_map, slot_map)
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            original = research.execute((0, 0, 1, 0, 0, 0), self.word, paths)
+            contents_edit = research.execute((0, 1, 0, 0, 0, 0), self.word, paths)
+            cursor_edit = research.execute((1, 0, 1, 0, 0, 0), self.word, paths)
+            remapped = research.execute((0, 1, 0, 0, 0, 0), transported, paths)
+            self.assertEqual(original, (1, 0, 1, 1, 0, 0))
+            self.assertEqual(contents_edit, (1, 1, 0, 0, 1, 0))
+            self.assertEqual(cursor_edit, (0, 0, 1, 0, 1, 0))
+            self.assertEqual(remapped, (1, 1, 0, 1, 0, 0))
+        self.assertEqual(self.evidence["recodings"]["role_transport_rows"], 64)
+
+    def test_external_branch_control_matches_table_but_keeps_assistance_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory) / str(i) for i in range(6))
+            table = tuple(research.states(6).index(research.cursor_external_selection_control(state, paths))
+                          for state in research.states(6))
+        self.assertEqual(table, self.target)
+        self.assertTrue(self.evidence["external_selection_control"]["cursor_read_by_Python"])
+        self.assertTrue(self.evidence["external_selection_control"]["slot_path_chosen_by_Python"])
+        self.assertFalse(self.evidence["external_selection_control"]["internal_STEP_harness_branch"])
+
+    def test_workspace_is_necessary_in_declared_five_role_basis(self) -> None:
+        five = research.cursor_step_target(self.alphabet, False)
+        self.assertEqual(len(set(five)), 32)
+        self.assertFalse(research.is_affine(five))
+        self.assertTrue(self.evidence["five_without_workspace"]["all_length_impossible"])
+        self.assertEqual(self.evidence["minimum_extra_binary_capacity"], 1)
+
+    def test_all_thirteen_previous_evidence_sections_remain_unchanged(self) -> None:
+        import hashlib
+        import json
+        artifact = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))
+        fingerprints = self.evidence["preserved_previous_sections_sha256"]
+        self.assertEqual(len(fingerprints), 13)
+        for key, sha in fingerprints.items():
+            self.assertEqual(hashlib.sha256(json.dumps(artifact[key], sort_keys=True).encode()).hexdigest(), sha)
+
+
 if __name__ == "__main__":
     unittest.main()

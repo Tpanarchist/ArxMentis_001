@@ -2232,6 +2232,269 @@ Python diagnostics on both changed Python files, with current-source SHA verific
 `git diff --check` passes; all twelve previous evidence sections and their
 fingerprints, previous test bytes and previous foundations bytes are preserved.
 
+## 19. Persistent Execution Cursor Boundary
+
+This experiment separates active-position state from stored semantic length.
+There is no L role and no DONE state. It adds no runtime law, configured carrier,
+program-counter class, pointer, opcode, branch or loop. The complete research
+contract uses five existing capacities as `(C,P0,P1,A,B)` and one temporary,
+expendable binary file W. The same externally retained STEP word consumes every
+input; Python does not inspect C to select an instruction slot.
+
+### Complete common-alphabet STEP contract
+
+Actual runtime resampling retains `X=(2,3,0,1)` and `R=(1,3,0,2)` on data input
+order 00,01,10,11, where R is swap after X. Let F0=X and F1=R. STEP is:
+
+```text
+C=0: (0,P0,P1,A,B,W) -> (1,P0,P1,F_P0(A,B),0)
+C=1: (1,P0,P1,A,B,W) -> (0,P0,P1,F_P1(A,B),0)
+```
+
+This specifies all 64 physical rows, including both old W values. The full table
+below uses binary `(C,P0,P1,A,B,W)` for input/output indices:
+
+```text
+36 36 38 38 32 32 34 34 44 44 46 46 40 40 42 42
+50 50 54 54 48 48 52 52 58 58 62 62 56 56 60 60
+ 4  4  6  6  0  0  2  2 10 10 14 14  8  8 12 12
+20 20 22 22 16 16 18 18 26 26 30 30 24 24 28 28
+```
+
+The eight cursor/program configurations have active meanings X,X,R,R,X,R,X,R
+for codes 000..111; cursor is complemented, program bits preserved and W cleared.
+Image size is exactly 32, not merely at most 32. Each output has exactly two
+preimages differing only in old W. Thus W is the only intentionally discarded
+input distinction; all 32 cursor/program/data classes survive.
+
+Using XOR addition and Boolean multiplication, define:
+
+```text
+I = P0 + C*(P0 + P1)
+q = 1 + A + B
+C'  = 1 + C
+P0' = P0
+P1' = P1
+A'  = 1 + A + I*q
+B'  = B + I*q
+W'  = 0
+```
+
+The complete ANF has output degrees `[1,1,1,3,3,0]`. The six-bit map is
+nonaffine, nonbijective and rank 32. Its five-bit counterpart without W is a
+nonaffine total bijection. Every bijective primitive on five distinct roles is
+affine, and lost rank cannot be regained. Consequently that counterpart is
+impossible at every length in the declared basis. One temporary extra binary
+capacity is necessary and sufficient for this contract, with no configured
+addition. This obstruction is separate from section18's canonical-domain proof.
+
+### Twenty-call modular support and observed stages
+
+The proposed composition was grounded against every physical input before global
+search. It consists of controlled slot swap 6, common decoder 7, controlled slot
+restore 6 and cursor toggle 1. The exact word, with indices replaced by roles, is:
+
+```text
+ 1 copy(P0,P1,W)
+ 2 plastic(W,P0,C)
+ 3 plastic(P0,W,C)
+ 4 plastic(P1,P0,C)
+ 5 copy(W,P0,P1)
+ 6 xor(P0,W)
+ 7 toggle(A)
+ 8 copy(A,B,W)
+ 9 plastic(W,A,P0)
+10 plastic(A,W,P0)
+11 plastic(B,A,P0)
+12 copy(W,A,B)
+13 xor(A,W)
+14 copy(P0,P1,W)
+15 plastic(W,P0,C)
+16 plastic(P0,W,C)
+17 plastic(P1,P0,C)
+18 copy(W,P0,P1)
+19 xor(P0,W)
+20 toggle(C)
+```
+
+All64 actual-file runs have these common cuts:
+
+| Cut | Observed persistent state |
+|---|---|
+|6|original C, active instruction in physical P0, inactive in P1, original data, W=0|
+|13|same selected slots and C, data F_active(original data), W=0|
+|19|original P0/P1 restored, original C, decoded data, W=0|
+|20|original P0/P1, opposite C, decoded data, W=0|
+
+The selection primitive sequence temporarily exchanges slot contents. Program
+bytes are restored at each STEP boundary; preservation is not claimed after
+every constituent primitive. The seven-call decoder is the same established
+schema used independently at either stored position. Cursor advance is the
+existing toggle included in the fixed word, not a harness edit between STEPs.
+This is inspectable support for the active-position interpretation.
+
+### Independent global target search and equivalence boundary
+
+Every distinct-role call over six roles was sampled:426 raw calls,336 unique
+complete tables. Memory/XOR aliases and symmetric evaluator arguments are
+canonicalized extensionally; all low-level kinds remain admitted. Global search
+uses every 64 input row and all persistent effects, including both copy writes.
+It searches increasing lengths 0..12, one witness per query, with 5-second check
+caps below length 6,20 seconds for6..8 and40 seconds for9..12. Wall budgets allow
+one additional second. No complete shortest-word enumeration was requested.
+
+Lengths 0..5 are UNSAT. Lengths 6..12 time out. An independent clean-W relaxation
+covers all 32 required classes with injective prefixes and incremental row
+refinement; lengths 6..9 also time out. Only UNSAT on this relaxation could prove
+a lower bound for the full arbitrary-W contract. Positive relaxed words would
+require full64 runtime validation before acceptance.
+
+The retained global bounds are lower 6, demonstrated upper 20, minimum unresolved,
+with lengths 6..19 unresolved. Lengths 13..19 were not searched. No globally
+compressed witness was found within these budgets. The shortest known global
+witness is therefore the modular twenty-call construction. This does not prove
+it minimal. Timeouts do not imply absence, and construction is not credited as
+an independent solver-found word.
+
+Equivalence here means exact equality of the entire final64-row persistent-state
+table. The modular selection/decoder/restoration cuts are a different observation
+boundary. A future shorter endpoint word could be equivalent at exit while having
+different internal stages; complete endpoint equivalence would not erase those
+observed differences. No execution-cost advantage is claimed.
+
+### Causal interventions and reuse of one STEP word
+
+For all 64 initial states, actual interventions toggle just one persistent file,
+with every other initial file byte unchanged. The experiment covers64 inactive
+slot edits,64 active slot edits and64 cursor-only edits. At C=0, P1 edits do not
+change STEP data; at C=1, P0 edits do not change it. Active edits substitute the
+other common instruction. Cursor edits switch exactly between F_P0 and F_P1 and
+advance the edited cursor to its opposite value.
+
+X and R agree on data01 and10, so different active instructions need not change
+every particular data result. The intervention succeeds by matching the complete
+predicted functions; it does not require an output difference where those
+functions coincide. Program bytes survive each STEP exactly.
+
+All64 physical initial states also receive STEP followed by the identical STEP,
+without rewriting cursor, program or workspace between invocations. Starting
+C=0, the first invocation gives C=1 and F_P0(data); the second gives C=0 and
+F_P1(F_P0(data)). Starting C=1 instead executes P1 then P0, returning C to 1.
+Initialization convention does not determine the mechanism's selected position.
+These observations establish the defined two-state cycle, without restart or
+wraparound semantics beyond that contract.
+
+For 00, two genuine X executions give identity with an intermediate X result.
+For 11, two genuine R executions complement both bits with an intermediate R
+result. For mixed words 01 and10, the final maps are respectively swap and swap
+plus complement-both; they differ because X and R do not commute. Stored contents
+and persistent advancement select the order, while Python repeats one word.
+
+Thirty-two process pairs cover four programs, four data inputs and both old W
+values, initially C=0. ProcessA initializes and executes exactly one STEP, then
+exits with C=1 and the first instruction result. Fresh processB receives only
+carrier paths and the request to execute the same STEP once. It gets no cursor
+value or slot-specific instruction, reads persistent state through the fixed
+primitive word, consumes P1 and returns C to 0. Program bytes survive both
+processes. This establishes persistent execution-state continuation across death.
+
+### Reached sets, physical identities and representation maps
+
+Every witness has a full prefix record for the32 required clean-W classes and
+for all 64 old-W inputs: reached sets and cardinalities, full-cube image rank,
+affine hull, next globally lossy use, restricted injectivity, program-bit
+preservation, cursor distribution and workspace values. All32 required classes
+remain distinct at every prefix, and every globally lossy call is injective on
+the actual clean-W reached set. Both-old-W trajectories collapse only permitted
+workspace information from 64 to 32. Workspace is zero at modular cuts6,13,19,20.
+Intermediate cursor distribution is recorded rather than imposed on a compressed
+candidate; program contents may be transported temporarily during selection.
+
+Configured-role remapping covers all 120 assignments of C/P0/P1/A/B with W separate,
+replaying all 64 inputs: 7,680 actual-file STEP executions. Configured repository
+state is not scratch. The optional full six-role experiment uses 720 assignments
+of six temporary counterparts on 32 clean-W inputs. Its run decision is based on
+the measured configured-mapping cost, with a declared 180-second estimated-cost
+budget. Actual decision, estimate, row count and elapsed configured-mapping time
+are retained in the artifact; skipping that optional experiment proves no absence.
+On the retained run the mandatory test took 211.124 seconds, predicting 633.372
+seconds for the optional test, beyond its 180-second estimate budget. The full
+720-assignment experiment was not run; no six-role remapping claim is made.
+
+Instruction recoding complements P0 and P1 together (mask 24); C keeps its position
+meaning. The transported target is `phi STEP phi^-1`. A common recoded decoder
+inside the same modular architecture gives a twenty-call upper bound on all 64
+inputs. Cursor recoding separately complements C (mask 32), retaining logical
+positions. Using the established recoded controlled swap for selection and
+restoration also gives 20 calls. The straightforward cursor conjugation word has
+22 calls and is retained as another upper witness. Recoded minima were not searched.
+
+Swapping P0/P1 physical assignments requires transporting the operation word too.
+Editing contents alone leaves the word and logical assignment fixed; it changes
+which instruction occupies the chosen position. Complementing C with the native
+word changes the chosen position; recoding C transports its interpretation and
+executor together. The two declared representation maps are different even though
+slot-role exchange and cursor complement induce identical conjugated endpoint
+tables for this symmetric two-slot target. Their persistent interventions and
+observed role assignments remain distinct. All64 slot-role transport inputs and
+all 64 inputs for each recoding are explicitly replayed.
+
+### External-selection control and the earned boundary
+
+The assistance control reads C in Python, chooses the P0 or P1 path, runs the
+seven-call common decoder and toggles C, for 8 primitive calls plus an external
+cursor-dependent path choice. Its full table equals STEP. It remains a harness
+protocol, not evidence of intrinsic selection, and its lower call count supplies
+no cost comparison under equal assistance. The actual STEP word uses no such
+branch. One call to the same word consumes the persisted active position and
+advances it; the next call consumes the other position without a harness rewrite.
+
+The earned claim is persistent active-position state, cursor-controlled common
+instruction selection, automatic advancement within STEP, program preservation,
+process-independent continuation and repeated execution of one reusable word.
+Neither the cursor's meaning nor its advancement law was learned. The role is
+assigned through this protocol and can be transported across carrier identities.
+
+| Contribution | What remains supplied or required |
+|---|---|
+|Carrier/state|five existing capacities, temporary W, filesystem persistence|
+|Transformation laws|existing hard-coded equations, complete primitive support|
+|Representation/maps|exactly two ordered positions, common X/R alphabet, role/encoding maps|
+|Sequencing|externally found/constructed and retained STEP word; invocation and invocation count|
+|Environment|initial writes, data, file assignments, process scheduling and interventions|
+|Evaluator|complete target, intermediate cuts, intervention predictions and continuation criteria|
+
+Python still defines two positions, supplies the alphabet, retains the executor,
+initializes experiments and chooses how often to invoke STEP. It no longer needs
+to inspect C to choose a slot, manually edit the active position between STEPs or
+invoke different slot-specific decoders. This is the scoped reduction in external
+sequencing, with no claim of autonomous invocation.
+
+There is no DONE state: repeated external invocation gives 0->1->0->1 indefinitely.
+This establishes neither termination, halting, bounds checking, stored length
+combined with the cursor, arbitrary slots/addressing, jumps, branch/loop
+instructions, stack/call semantics, endogenous program generation, general
+interpretation nor self-modification. The next clean question is persistent
+SLOT0/SLOT1/DONE state and a terminal response under repeated STEP, before
+recombining variable length. That experiment was not implemented.
+
+### Reproduction and validation
+
+Use the explicit Python 3.14.6 repository venv:
+`.venv/Scripts/python.exe -B composition_experiments.py --cursor-experiment --output
+composition_results.json`. This appends the new experiment while preserving the
+thirteen previous evidence sections and fingerprints. Run
+`test_composition_experiments.PersistentCursorTests` first, then the complete
+baseline 146 tests plus additions. Final Pylance, counts, protected-source hashes,
+prefix replay audits and diff status are recorded in `validation_results.json`.
+Final focused validation passed 23 tests in 161.559 seconds. The full suite passed
+169 tests in 705.673 seconds: 40 historical, 106 prior research and 23 new. Installed
+Pylance 2026.4.1 reports zero Python diagnostics on both changed Python files, with
+current-source SHA verification. `git diff --check` passes. All thirteen prior
+evidence sections and fingerprints, previous test bytes and previous foundations
+bytes are preserved; protected runtime, historical tests, README and ignore file
+remain unchanged.
+
 ## Reproduction and first-pass validation
 
 Use the explicit repository interpreter:
