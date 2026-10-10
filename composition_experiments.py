@@ -2595,6 +2595,318 @@ def cursor_step_experiment() -> dict[str, object]:
         "preserved_previous_sections_sha256": {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
             for key, value in previous.items() if key not in ("scope", "persistent_cursor")}}
 
+def terminal_code_swap(control: int) -> tuple[Operation, ...]:
+    """Three-call research word: swap codes00/10 iff control=1; code01 stays.
+
+    Valid on the canonical three-code domain. This is support, not a runtime law.
+    """
+    return (("plastic", (control, 0, 1)), ("plastic", (control, 0, 1)), ("xor", (control, 0)))
+
+
+def terminal_code_gated_cnot(driver: int, target: int) -> tuple[Operation, ...]:
+    """Six-call word: target ^= E0*driver; both execution bits are restored.
+
+    E1=0 whenever E0=1 on entry. E1 is temporarily changed, never expendable.
+    """
+    forward = (("xor", (driver, 1)), ("plastic", (driver, 1, 0)))
+    backward = (("plastic", (driver, 1, 0)), ("xor", (driver, 1)))
+    return forward + (("xor", (1, target)),) + backward + (("xor", (1, target)),)
+
+
+def terminal_pair_toffoli(first: int, second: int, target: int) -> tuple[Operation, ...]:
+    """Eighteen-call word: target ^= (1-E1)*first*second on canonical inputs."""
+    swap = terminal_code_swap(first)
+    action = terminal_code_gated_cnot(second, target)
+    return swap + action + swap + action
+
+
+def terminal_branch_toffoli(code: int, first: int, second: int, target: int,
+                            extra: int) -> tuple[Operation, ...]:
+    """48-call DONE-only word, transported to one specified canonical code.
+
+    The four data/program roles are distinct; extra is restored. Execution-code
+    transport is chosen while constructing the fixed word, never by reading E.
+    """
+    if {first, second, target, extra} != {2, 3, 4, 5}:
+        raise ValueError("Declare the four distinct data/program roles")
+    action = terminal_code_gated_cnot(first, extra)
+    nonlinear = terminal_pair_toffoli(extra, second, target)
+    word = action + nonlinear + action + nonlinear
+    if code == 2:
+        permutation: tuple[Operation, ...] = ()
+    elif code == 0:
+        permutation = (("xor", (1, 0)), ("toggle", (0,)))
+    elif code == 1:
+        permutation = (("xor", (0, 1)), ("xor", (1, 0)), ("xor", (0, 1)))
+    else:
+        raise ValueError("Declare one canonical execution code")
+    return permutation + word + permutation
+
+
+def terminal_step_executor() -> tuple[Operation, ...]:
+    """One fixed121-call terminal word over six semantic capacities; no W."""
+    word: tuple[Operation, ...] = ()
+    for code, instruction, extra in ((0, 2, 3), (1, 3, 2)):
+        flip: tuple[Operation, ...] = ((("toggle", (4,)), ("xor", (0, 4)), ("xor", (1, 4)))
+                                     if code == 0 else (("xor", (1, 4)),))
+        # Conditional swap after the branch-specific X implements its common R.
+        word += flip + (("xor", (4, 5)),) + terminal_branch_toffoli(code, instruction, 5, 4, extra) + (("xor", (4, 5)),)
+    # Exchange codes00/01, merge exactly the permitted old SLOT1/DONE fibers,
+    # then restore the required execution-state representation.
+    return word + (("xor", (0, 1)), ("toggle", (1,)), ("evaluate", (2, 3, 0)),
+                   ("xor", (2, 0)), ("xor", (3, 0)), ("xor", (1, 0)), ("toggle", (0,)))
+
+
+def terminal_step_contract(alphabet: tuple[Table, Table]) -> tuple[Table, Table]:
+    """Six coordinates E0,E1,P0,P1,A,B; E0 is the high execution-code bit.
+
+    Only 00,01,10 are entry codes. All six output coordinates are constrained.
+    RESERVED=11 is unconstrained at entry/exit and admissible internally.
+    """
+    domain = tuple(range(48))
+    target = []
+    for value in domain:
+        e0, e1, p0, p1, a, b = states(6)[value]
+        code = 2 * e0 + e1
+        data = 2 * a + b
+        if code < 2:
+            data = alphabet[(p0, p1)[code]][data]
+        next_code = min(code + 1, 2)
+        target.append((next_code << 4) | (p0 << 3) | (p1 << 2) | data)
+    return domain, tuple(target)
+
+
+def terminal_collision_audit(current: Table, required: Table) -> dict[str, object]:
+    """Merging is legal exactly when merged origins require the same output."""
+    if len(current) != len(required):
+        raise ValueError("Declare corresponding origin and goal rows")
+    classes: dict[int, list[int]] = {}
+    for row, output in enumerate(current):
+        classes.setdefault(output, []).append(row)
+    forbidden = [rows for rows in classes.values() if len({required[i] for i in rows}) > 1]
+    return {"cardinality": len(classes), "compatible_with_target": not forbidden,
+            "forbidden_merge_origin_rows": forbidden,
+            "merged_origin_rows": [rows for rows in classes.values() if len(rows) > 1]}
+
+
+def terminal_step_trajectory(domain: Table, required: Table, word: Sequence[Operation],
+                             sampled: dict[Operation, Table]) -> list[dict[str, object]]:
+    """Audit actual reached sets and target-relative, rather than 48-row, injectivity."""
+    current = domain
+    rows = subset_trajectory(6, domain, word, sampled, ())
+    for step, row in enumerate(rows):
+        reachable = tuple(sorted(set(current)))
+        next_table = sampled[word[step]] if step < len(word) else None
+        row["execution_codes_occupied"] = sorted({value >> 4 for value in reachable})
+        row["reserved_execution_code_occupied"] = any(value >> 4 == 3 for value in reachable)
+        row["program_bits_preserved"] = all((x & 12) == (y & 12)
+            for x, y in zip(domain, current, strict=True))
+        row["data_distribution"] = [sum((value & 3) == code for value in reachable) for code in range(4)]
+        row["collision_audit"] = terminal_collision_audit(current, required)
+        row["next_full_image_size"] = len(set(next_table)) if next_table is not None else None
+        if next_table is not None:
+            following = tuple(next_table[value] for value in current)
+            row["next_collision_audit"] = terminal_collision_audit(following, required)
+            is_plastic = word[step][0] == "plastic"
+            row["plastic_48_injective_constraint_applies"] = is_plastic and len(reachable) == 48 and len(set(following)) == 48
+            row["plastic_complete_image_equality"] = (set(following) == set(next_table)) if is_plastic else None
+            if row["plastic_48_injective_constraint_applies"]:
+                assert set(following) == set(next_table)
+            current = following
+        else:
+            row["next_collision_audit"] = None
+            row["plastic_48_injective_constraint_applies"] = False
+            row["plastic_complete_image_equality"] = None
+    return rows
+
+
+def search_terminal_step(domain: Table, target: Table) -> dict[str, object]:
+    """Canonical partial target only; never assert distinctness of all 48 outputs."""
+    records: list[dict[str, object]] = []
+    found: list[tuple[Operation, ...]] = []
+    for length in range(13):
+        timeout = 5_000 if length < 6 else 20_000 if length < 9 else 40_000
+        words, record = symbolic_program_search(6, domain, target, length,
+            enumerate_all=False, timeout_ms=timeout, wall_seconds=timeout / 1000 + 1)
+        records.append(record)
+        found.extend(words)
+        print(f"terminal canonical search: {length} calls {record['status']}", flush=True)
+        if words:
+            break
+    lower = 0
+    for record in records:
+        if record["length"] == lower and record["status"] == "unsat":
+            lower += 1
+        else:
+            break
+    return {"records": records, "words": found, "proven_lower_bound": lower,
+            "demonstrated_upper_bound": min(map(len, found)) if found else None,
+            "proven_minimum": min(map(len, found)) if found and min(map(len, found)) == lower else None,
+            "maximum_length": 12, "all_shortest_enumeration": False,
+            "injective_48_prefix_constraint_used": False,
+            "reserved_intermediate_states_allowed": True}
+
+
+def terminal_witness_evidence(word: tuple[Operation, ...], domain: Table, target: Table,
+                              sampled: dict[Operation, Table]) -> dict[str, object]:
+    """Ground a fixed word, repeated execution, DONE and fresh-process continuation."""
+    import subprocess
+    import sys
+    actual_full = sample_program(6, word)
+    actual = tuple(actual_full[value] for value in domain)
+    assert actual == target
+    trajectory = terminal_step_trajectory(domain, target, word, sampled)
+    assert all(cast(dict[str, object], row['collision_audit'])['compatible_with_target'] for row in trajectory)
+    repeated = []
+    processes = []
+    with tempfile.TemporaryDirectory() as directory:
+        names = ('.arxmentis-state', 'execution-state-extra', '.arxmentis-state-2',
+                 '.arxmentis-memory', '.arxmentis-policy', '.arxmentis-policy-1')
+        paths = tuple(Path(directory) / name for name in names)
+        for value in domain:
+            execute(states(6)[value], (), paths)
+            original = tuple(path.read_bytes() for path in paths[2:4])
+            steps = []
+            for _ in range(4):
+                for operation in word:
+                    apply_operation(operation, paths)
+                state = tuple(runtime.read_state(path) for path in paths)
+                steps.append(state)
+                assert tuple(path.read_bytes() for path in paths[2:4]) == original
+            assert steps[-1] == steps[-2]
+            repeated.append({'input': states(6)[value], 'steps': steps,
+                             'program_bytes_preserved': True, 'external_E_edits': False})
+        if word == terminal_step_executor():
+            script = ('import sys; from pathlib import Path; import composition_experiments as r; '
+                      'p=tuple(Path(x) for x in sys.argv[1:]); '
+                      '[r.apply_operation(op,p) for op in r.terminal_step_executor()]')
+            for value in range(16):
+                execute(states(6)[value], (), paths)
+                original = tuple(path.read_bytes() for path in paths[2:4])
+                steps = []
+                for _ in range(3):
+                    subprocess.run([sys.executable, '-B', '-c', script, *(str(path) for path in paths)],
+                                   cwd=Path(__file__).resolve().parent, check=True, capture_output=True)
+                    state = tuple(runtime.read_state(path) for path in paths)
+                    steps.append(state)
+                    assert tuple(path.read_bytes() for path in paths[2:4]) == original
+                _, _, p0, p1, a, b = states(6)[value]
+                alphabet = semantic_length_alphabet()
+                first = alphabet[p0][2*a+b]
+                second = alphabet[p1][first]
+                assert steps[0] == (0,1,p0,p1,first >> 1,first & 1)
+                assert steps[1] == steps[2] == (1,0,p0,p1,second >> 1,second & 1)
+                processes.append({'input': states(6)[value], 'fresh_process_states': steps,
+                                  'arguments': 'six paths only; fixed STEP once; no execution code or slot',
+                                  'program_bytes_preserved': True})
+    return {'word': word, 'source': 'derived construction', 'length': len(word),
+            'actual_target': actual, 'actual_full64_table': actual_full,
+            'reserved_entry_rows_observed_not_required': list(range(48,64)),
+            'trajectory': trajectory, 'repeated_STEP': repeated,
+            'process_continuation': processes, 'fresh_process_count': 3*len(processes),
+            'harness_execution_state_dispatch': False, 'low_level_calls_run_at_DONE': len(word)}
+
+
+def terminal_support_evidence() -> list[dict[str, object]]:
+    """Actual runtime support for the four intermediate word identities, on all48 rows."""
+    records = []
+    domain = tuple(range(48))
+    words = (terminal_code_swap(2), terminal_code_gated_cnot(2,3),
+             terminal_pair_toffoli(2,3,4), terminal_branch_toffoli(2,2,3,4,5))
+    names = ('code transposition', 'code-gated CNOT', 'two-code Toffoli', 'DONE-only Toffoli')
+    for index, (name, word) in enumerate(zip(names, words, strict=True)):
+        actual = sample_program(6,word)
+        required = []
+        for x in domain:
+            e0,e1,p0,p1,_,_ = states(6)[x]
+            delta = ((1-e1)*p0*32 if index == 0 else e0*p0*4 if index == 1
+                     else (1-e1)*p0*p1*2 if index == 2 else e0*p0*p1*2)
+            required.append(x ^ delta)
+        assert tuple(actual[x] for x in domain) == tuple(required)
+        assert set(required) == set(domain)
+        records.append({'name':name, 'word':word, 'length':len(word),
+                        'domain':domain, 'required':required, 'actual_full64_table':actual,
+                        'canonical_image_size':48, 'full_image_size':len(set(actual))})
+    return records
+
+
+def terminal_step_experiment() -> dict[str, object]:
+    """External terminal-state experiment; the sixth capacity is semantic, not W."""
+    alphabet = semantic_length_alphabet()
+    domain, target = terminal_step_contract(alphabet)
+    operations = role_complete_basis(6)
+    sampled_raw = sample_basis(6, operations)
+    basis, aliases = canonical_basis(sampled_raw)
+    family: dict[str, list[dict[str, object]]] = {}
+    for name, table in sampled_raw.items():
+        family.setdefault(operations[name][0], []).append(table_properties(table))
+    family_summary = {kind: {"calls": len(records), "domain_size": 64,
+        "image_sizes": sorted({cast(int, record['image_size']) for record in records}),
+        "bijective_values": sorted({cast(bool, record['bijective']) for record in records}),
+        "affine_values": sorted({cast(bool, record['affine']) for record in records}),
+        "degrees": sorted({cast(int, cast(dict[str, object], record['algebraic_normal_form'])['degree']) for record in records})}
+        for kind, records in family.items()}
+    sampled = {op: sampled_raw[name] for name, op in operations.items()}
+    one_call = []
+    for name, table in basis.items():
+        outputs = tuple(table[value] for value in domain)
+        collision = terminal_collision_audit(outputs, target)
+        plastic = operations[name][0] == 'plastic'
+        fills = set(outputs) == set(table)
+        if plastic and collision['cardinality'] == 48:
+            assert fills
+        one_call.append({"name": name, "full_image_size": len(set(table)),
+            "collision_audit": collision, "plastic": plastic,
+            "fills_complete_primitive_image": fills,
+            "trajectory": terminal_step_trajectory(domain, target, (operations[name],), sampled)})
+    print(f"terminal basis audit: {len(sampled_raw)} raw, {len(basis)} unique", flush=True)
+    search = search_terminal_step(domain, target)
+    witnesses = [terminal_witness_evidence(terminal_step_executor(), domain, target, sampled)]
+    for word in cast(list[tuple[Operation, ...]], search['words']):
+        evidence = terminal_witness_evidence(word, domain, target, sampled)
+        evidence['source'] = 'global solver'
+        witnesses.append(evidence)
+    search['demonstrated_upper_bound'] = min(len(cast(tuple[Operation, ...], witness['word'])) for witness in witnesses)
+    search['proven_minimum'] = search['demonstrated_upper_bound'] if search['demonstrated_upper_bound'] == search['proven_lower_bound'] else None
+    roles = (1, 2, 3, 4, 5, 0)
+    borrowed_cursor = tuple((kind, tuple(roles[i] for i in indices))
+                            for kind, indices in cursor_step_executor())
+    borrowed_table = sample_program(6, borrowed_cursor)
+    borrowed_outputs = tuple(borrowed_table[value] for value in domain)
+    borrowed = {'word': borrowed_cursor, 'actual_outputs': borrowed_outputs,
+        'matching_rows': sum(x == y for x, y in zip(borrowed_outputs, target, strict=True)),
+        'trajectory': terminal_step_trajectory(domain, target, borrowed_cursor, sampled),
+        'status': 'rejected: E0 is semantic state, not expendable workspace'}
+    old = json.loads(Path(__file__).with_name('composition_results.json').read_text(encoding='utf-8'))
+    fingerprints = {key: hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+                    for key, value in old.items() if key not in ('scope', 'persistent_terminal')}
+    return {"roles": ['E0','E1','P0','P1','A','B'],
+        "bit_order": 'E0 is high bit: E=2*E0+E1; state index=32*E0+16*E1+8*P0+4*P1+2*A+B',
+        "execution_codes": {'00':'SLOT 0','01':'SLOT 1','10':'DONE','11':'RESERVED'},
+        "representation_minimum_execution_bits": 2, "configured_carriers_added": 0,
+        "temporary_semantic_execution_capacities": 1, "dedicated_workspace_capacities": 0,
+        "physical_states": 64, "canonical_states": 48, "reserved_states": 16,
+        "alphabet": alphabet, "domain": domain, "target": target,
+        "required_rows": [{'input':states(6)[x], 'output':states(6)[y]} for x,y in zip(domain,target,strict=True)],
+        "target_image_size": len(set(target)), "target_collision_classes": terminal_collision_audit(target,target),
+        "affine_extension": affine_extension(domain,target,6),
+        "primitive_families": family_summary, "raw_calls": len(sampled_raw),
+        "unique_tables": len(basis), "canonical_basis": basis, "basis_aliases": aliases,
+        "one_call_candidates": one_call, "search": search, "witnesses": witnesses,
+        "constructive_support": terminal_support_evidence(),
+        "borrow_execution_bit_as_workspace_control": borrowed,
+        "terminal_execution_established": bool(witnesses), "autonomous_cessation_established": False,
+        "length_combined": False, "runtime_modified": False,
+        "preserved_previous_sections_sha256": fingerprints,
+        "correction": '48 distinct inputs do not require 48 distinct outputs. The terminal target has image32: 16 SLOT0 outputs are singleton fibers; 16 DONE outputs each merge one SLOT1 and one DONE input. Prefix collisions are admissible only within those exact target fibers.',
+        "external_contributions": {'carrier':'six semantic bits; sixth temporary path is E1, not expendable workspace',
+            'transformation_law':'existing runtime low-level laws and sampled X/R; no new primitive',
+            'representation':'harness assigns roles, canonical codes, alphabet and two positions',
+            'sequencing':'external solver chooses words; harness retains and invokes any witness',
+            'environment':'temporary files, initialization and process lifetimes supplied externally',
+            'evaluator':'all six target coordinates on 48 rows; reserved entry behavior unspecified'}}
+
+
 def run_experiments() -> dict[str, object]:
     b2 = sample_basis(2, two_bit_basis())
     b3_ops = three_bit_basis()
@@ -2718,6 +3030,8 @@ def run_experiments() -> dict[str, object]:
     retained_factorized = (json.loads(result_path.read_text(encoding="utf-8")).get("factorized_selection")
                            if result_path.exists() else None)
     return {
+        "persistent_terminal": (json.loads(result_path.read_text(encoding="utf-8")).get("persistent_terminal")
+                              if result_path.exists() else None),
         "persistent_cursor": (json.loads(result_path.read_text(encoding="utf-8")).get("persistent_cursor")
                             if result_path.exists() else None),
         "semantic_length": (json.loads(result_path.read_text(encoding="utf-8")).get("semantic_length")
@@ -2799,8 +3113,13 @@ def main() -> None:
                         help="Recompute stored semantic length proof, separate searches and actual-file evidence")
     parser.add_argument("--cursor-experiment", action="store_true",
                         help="Recompute persistent execution cursor searches and actual-file support")
+    parser.add_argument("--terminal-experiment", action="store_true",
+                        help="Recompute canonical terminal-state target, six-role basis and bounded search")
     args = parser.parse_args()
-    if args.cursor_experiment:
+    if args.terminal_experiment:
+        result = json.loads(Path(__file__).with_name("composition_results.json").read_text(encoding="utf-8"))
+        result["persistent_terminal"] = terminal_step_experiment()
+    elif args.cursor_experiment:
         result = json.loads(Path(__file__).with_name("composition_results.json").read_text(encoding="utf-8"))
         result["persistent_cursor"] = cursor_step_experiment()
     elif args.length_experiment:

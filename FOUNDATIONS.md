@@ -2495,6 +2495,234 @@ evidence sections and fingerprints, previous test bytes and previous foundations
 bytes are preserved; protected runtime, historical tests, README and ignore file
 remain unchanged.
 
+## 20. Persistent Terminal Execution State Boundary
+
+This experiment uses six semantic roles `(E0,E1,P0,P1,A,B)` and no dedicated
+workspace. E0 is the high execution-code bit: `E=2*E0+E1`; physical state indices
+are `32*E0+16*E1+8*P0+4*P1+2*A+B`. The codes are 00=SLOT0, 01=SLOT1,
+10=DONE, and 11=RESERVED. Three distinguishable execution positions require two
+binary distinctions. This is a representation-capacity fact, independent of
+executability. Five configured capacities plus one temporary semantic E1 path
+supply the six roles; no configured capacity or runtime law is added.
+
+The temporary sixth path is not W. Both execution bits retain their semantic
+information until a merge explicitly allowed by the terminal target. The actual
+file experiments use temporary counterparts of the five configured identities
+and an `execution-state-extra` file. Configured repository state is not scratch.
+Stored semantic length is not combined with this experiment.
+
+### Canonical target and a necessary correction to injectivity
+
+X and R are freshly resampled from the runtime, retaining exactly
+`X=(2,3,0,1)` and `R=(1,3,0,2)` on data indices00,01,10,11. Let F0=X and F1=R.
+All six output coordinates are required on the 48 canonical inputs:
+
+```text
+(00,P0,P1,A,B) -> (01,P0,P1,F_P0(A,B))
+(01,P0,P1,A,B) -> (10,P0,P1,F_P1(A,B))
+(10,P0,P1,A,B) -> (10,P0,P1,A,B)
+```
+
+Inputs48..63 have execution code11 and no required entry/exit semantics. They may
+be reached internally. The complete required output table for inputs0..47 is:
+
+```text
+18 19 16 17 22 23 20 21 25 27 24 26 29 31 28 30
+34 35 32 33 37 39 36 38 42 43 40 41 45 47 44 46
+32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 47
+```
+
+Forty-eight distinct inputs do not require 48 distinct final outputs. The target
+has exactly32 outputs:16 SLOT1-code outputs have singleton SLOT0 preimages;
+16 DONE-code outputs each have one SLOT1 preimage and one DONE preimage. Their
+program contents agree and the SLOT1 data transforms into the DONE data.
+A prefix may merge those origins. It must never merge origins with different
+required final outputs. The new collision audit tests this condition explicitly,
+without imposing the invalid constraint that all48 rows remain distinct forever.
+
+The target has no affine extension to the full cube. GF(2) elimination provides
+a recoverable contradiction: input indices0,1,8,9 have zero XOR of augmented
+features but output XOR3. Thus any successful word needs nonlinear support;
+toggles, XORs, copies and evaluation alone cannot implement the partial target.
+No Boolean degree is assigned to an unspecified full-cube target. The observed
+full64 executor table is retained separately, including its unconstrained
+reserved-input behavior.
+
+### Complete six-role primitive re-audit
+
+All426 admitted distinct-role calls are sampled on all64 physical inputs before
+search. Complete table canonicalization retains336 transformations and every
+alias. Initialization writes are not admitted as free transformations.
+
+| Family | Raw calls | Full domain | Full image | Bijective | Affine | Boolean degree |
+|---|---:|---:|---:|---|---|---:|
+|toggle|6|64|64|yes|yes|1|
+|XOR|30|64|64|yes|yes|1|
+|memory-dependent XOR alias|30|64|64|yes|yes|1|
+|copy, including both writes|120|64|32|no|yes|1|
+|evaluation as parity write|120|64|32|no|yes|1|
+|plastic|120|64|48|no|no|2|
+
+If a plastic step is injective on48 reached states, those outputs equal its
+complete48-state image. This follows from inclusion and equal cardinality, and
+is verified on each relevant actual reached set. It is a necessary condition,
+not sufficient reachability. The audit records all336 one-call candidates with
+both prefix geometry and target-relative collisions. Eight plastic calls are
+injective on the initial canonical domain and fill their full images. Including
+36 bijective calls,44 unique first calls preserve every required output
+separation. The remaining first calls are rejected by explicit forbidden merges.
+
+### Canonical partial-target search
+
+The existing finite-word/Z3 machinery searches the48-row target first, requiring
+all six output bits. One shared operation choice at each position handles every
+row. RESERVED intermediates are allowed. No48-row prefix-distinctness constraint
+is imposed, and no semantics are invented for reserved entries.
+
+Lengths0..5 are proven UNSAT. Lengths6..12 time out, remaining UNKNOWN. Per-check
+caps are5 seconds below length6,20 seconds for6..8 and40 seconds for9..12, with one
+additional second in each wall budget. One witness is requested per query;
+all-shortest enumeration is not attempted. The direct solver finds no word.
+A separate constructive witness below establishes upper121, so the current
+bounds are `6 <= minimum <= 121`. Lengths6..120 remain unresolved, with13..120
+not searched. Neither minimum121 nor any all-length impossibility is claimed.
+The constructive word is not credited as a solver discovery.
+
+### Inspectable constructive support through reserved-state slack
+
+Canonical execution state satisfies E0*E1=0. The construction uses that relational
+constraint while restoring both bits at each supporting-word boundary. No
+capacity is treated as expendable. All support identities below are separately
+replayed against actual files on all48 canonical inputs.
+
+Let u,v,t,z be distinct members of P0,P1,A,B. Programs are written in execution
+order. S_u is the three-call word:
+
+```text
+plastic(u,E0,E1); plastic(u,E0,E1); xor(u,E0)
+```
+
+It swaps execution codes00/10 when u=1 and preserves01. K_(u,v) is the six-call
+word:
+
+```text
+xor(u,E1); plastic(u,E1,E0); xor(E1,v);
+plastic(u,E1,E0); xor(u,E1); xor(E1,v)
+```
+
+It gives `v'=v+E0*u`, restoring all other semantic coordinates. Then:
+
+```text
+T_(u,v,t) = S_u; K_(v,t); S_u; K_(v,t)             [18 calls]
+D_(u,v,t;z) = K_(u,z); T_(z,v,t); K_(u,z); T_(z,v,t) [48 calls]
+```
+
+T adds `(1-E1)*u*v` to t. D adds `E0*u*v` to t and restores z. Thus D is a
+DONE-code-only data/program Toffoli on this interface. Affine involutions on the
+two execution bits transport that support to code00 or01. These names denote
+research word builders with fully recoverable primitive support, not runtime
+primitives, persistent macros or an interpreter. The fixed final executor is
+expanded before execution; Python never reads E to choose one of these builders.
+
+Branch-specific X is an affine word: three calls at code00, one at code01.
+A branch-specific instruction-controlled data swap uses XOR(A,B), the transported
+D word controlled by the stored instruction and B, then XOR(A,B). Together these
+give57 calls for the SLOT0 instruction effect and57 for the SLOT1 effect. Program
+and execution state are restored at both cuts. Seven final calls advance and
+merge the required execution state:
+
+```text
+xor(E0,E1); toggle(E1); evaluate(P0,P1,E0);
+xor(P0,E0); xor(P1,E0); xor(E1,E0); toggle(E0)
+```
+
+Total: `57 + 57 + 7 = 121`. Evaluation here supplies an existing parity write;
+its carrier role is temporary encoding, not an ontological error type.
+
+| Cut | Reached count | Required observed behavior |
+|---|---:|---|
+|0|48|Canonical execution/program/data inputs|
+|57|48|Only original SLOT0 data transformed by F_P0; original E/program restored|
+|114|48|Original SLOT1 data also transformed by F_P1; original E/program restored|
+|116|48|Execution codes00/01 exchanged; program and transformed data retained|
+|117|32|Evaluation merges exactly target-compatible SLOT1/DONE origin pairs|
+|121|32|Required next execution code restored; exact terminal STEP target|
+
+The full121-call word is verified on actual files. Its complete64-state image is
+32, but only the48 canonical target rows are required. All48 required inputs
+remain distinct through cut116; cut117 is the only canonical cardinality loss.
+Every prefix is compatible with the exact final collision classes. The audit
+retains122 prefix records: ordered origin outputs, reached sets, cardinalities,
+full-cube prefix images, affine hulls, execution codes, program preservation,
+data distribution, primitive images and restricted injectivity. Forty injective
+plastic uses fill their complete48-state images. Reserved code11 appears at74
+prefixes; program bits differ from their input values at54 prefixes and are
+restored at whole STEP exits. Preservation is not asserted at every primitive.
+This establishes sufficiency of the particular reserved-code structure and
+composition, not sufficiency of representational cardinality alone.
+
+A negative control assigns E0 as the previous cursor executor's expendable
+workspace. It matches only16 of48 rows and merges origins with incompatible
+required outputs. That control is rejected. A semantic execution capacity may
+be borrowed and restored during a composition; it cannot simply be discarded
+under the old workspace contract.
+
+### Reuse, persistent DONE and evidence boundary
+
+All48 canonical inputs receive four invocations of the identical STEP word,
+without execution-state or program rewrites. Starting00 gives01 after the first
+instruction and10 after the second. Starting01 executes only P1 then reaches10.
+Starting10 preserves all six semantic bits. Further STEP calls remain10 and
+leave program/data unchanged. Program bytes are verified after every invocation;
+DONE preserves all six file bytes at the whole-STEP boundary. Inactive-slot
+interventions confirm that code00 data ignores P1, code01 data ignores P0, and
+DONE data ignores both instruction meanings.
+
+Sixteen independent program/data starts at00 also use three successive fresh
+processes, each receiving only six paths and the request to execute STEP once.
+The first exits at01, the second at10, and the third remains at10 with identical
+program/data. All48 child processes use the explicit repository venv with -B.
+They receive no execution code or slot argument. Persisted state supplies
+continuation across process death.
+
+The earned result is a persistent terminal execution state with reusable,
+state-controlled instruction execution and semantic inertness after DONE. It is
+not autonomous cessation: every DONE invocation still executes all121 low-level
+calls, including internal state changes and file operations. The harness still
+retains the word, invokes STEP and decides invocation count. No runtime loop,
+jump, branch instruction, arbitrary addressing, variable slot count, stack, VM,
+program generation or general interpretation is added or earned. Stored length
+remains separate; no length/cursor combination is implemented.
+
+| Contribution | Remaining supply |
+|---|---|
+|Carrier/state|Six semantic binary capacities, including temporary E1; no dedicated W|
+|Transformation law|Unchanged low-level runtime laws; sampled X/R and composed121-call word|
+|Representation/map|External role assignment, three canonical codes, reserved code and two-position alphabet|
+|Sequencing|Externally derived construction and bounded search; Python retains and invokes the same word|
+|Environment|Files, initialization, interventions and process lifetimes supplied by the experiment|
+|Evaluator|Exact six-coordinate target and explicit prefix collision classes; success defined externally|
+
+The evidence graph adds multiple parents: two-bit execution representation,
+persistent instruction/data capacities, nonlinear plastic support, the specific
+reserved-code constraint, exact permitted merging, and externally invoked fixed
+composition jointly support the terminal STEP witness. This does not turn those
+parents into universal lower bounds for every other termination representation.
+Autonomous invocation and autonomous physical cessation remain separate missing
+capabilities. This task stops at persistent semantic DONE.
+
+Final validation uses the explicit Python3.14.6 repository venv:26 focused tests
+pass in46.299 seconds, and195 total tests pass in757.263 seconds (40 historical,
+129 prior research,26 terminal additions). Installed Pylance2026.4.1 reports no
+Python diagnostics on either changed Python file, with matching final source
+hashes. All169 prior tests and all prior FOUNDATIONS bytes are preserved when
+only the new additions are removed. All14 prior evidence sections and their
+fingerprints, plus scope, remain unchanged. Protected runtime/historical tests,
+README and .gitignore are byte-identical. The independent actual-prefix audit
+matches5,856 state observations across122 prefixes. git diff --check passes.
+The final record, current source hashes and complete prior validation record are
+retained in validation_results.json.
+
 ## Reproduction and first-pass validation
 
 Use the explicit repository interpreter:

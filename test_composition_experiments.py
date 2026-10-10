@@ -1606,5 +1606,302 @@ class PersistentCursorTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256(json.dumps(artifact[key], sort_keys=True).encode()).hexdigest(), sha)
 
 
+class PersistentTerminalTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        import json
+        cls.artifact = json.loads(Path("composition_results.json").read_text(encoding="utf-8"))
+        cls.evidence = cls.artifact["persistent_terminal"]
+        cls.alphabet = research.semantic_length_alphabet()
+        cls.domain, cls.target = research.terminal_step_contract(cls.alphabet)
+
+    def test_canonical_bit_order_and_three_codes_require_two_bits(self) -> None:
+        self.assertEqual(cls_codes := self.evidence["execution_codes"],
+                         {"00": "SLOT 0", "01": "SLOT 1", "10": "DONE", "11": "RESERVED"})
+        self.assertEqual(len(cls_codes), 4)
+        self.assertEqual(self.evidence["representation_minimum_execution_bits"], 2)
+        self.assertEqual(self.domain, tuple(range(48)))
+        self.assertEqual({value >> 4 for value in self.domain}, {0, 1, 2})
+        self.assertEqual(set(range(64)) - set(self.domain), set(range(48, 64)))
+
+    def test_common_alphabet_is_freshly_runtime_grounded(self) -> None:
+        self.assertEqual(self.alphabet, ((2, 3, 0, 1), (1, 3, 0, 2)))
+        self.assertEqual(tuple(tuple(table) for table in self.evidence["alphabet"]), self.alphabet)
+
+    def test_slot0_executes_p0_and_advances_to_slot1(self) -> None:
+        for value in range(16):
+            _, _, p0, p1, a, b = research.states(6)[value]
+            data = self.alphabet[p0][2 * a + b]
+            self.assertEqual(research.states(6)[self.target[value]], (0, 1, p0, p1, data >> 1, data & 1))
+
+    def test_slot1_executes_p1_and_advances_to_done(self) -> None:
+        for value in range(16, 32):
+            _, _, p0, p1, a, b = research.states(6)[value]
+            data = self.alphabet[p1][2 * a + b]
+            self.assertEqual(research.states(6)[self.target[value]], (1, 0, p0, p1, data >> 1, data & 1))
+
+    def test_done_requires_exact_identity_on_every_semantic_bit(self) -> None:
+        self.assertEqual(self.target[32:], tuple(range(32, 48)))
+        self.assertTrue(all((x & 12) == (y & 12) for x, y in zip(self.domain, self.target, strict=True)))
+
+    def test_target_is_48_rows_not_an_invented_reserved_extension(self) -> None:
+        self.assertEqual(len(self.target), 48)
+        self.assertEqual(tuple(self.evidence["target"]), self.target)
+        self.assertEqual(len(self.evidence["required_rows"]), 48)
+        self.assertEqual(self.evidence["dedicated_workspace_capacities"], 0)
+        self.assertEqual(self.evidence["temporary_semantic_execution_capacities"], 1)
+        self.assertEqual(self.evidence["configured_carriers_added"], 0)
+
+    def test_terminal_map_has32_outputs_and_exact_allowed_fibers(self) -> None:
+        fibers = {y: [x for x in self.domain if self.target[x] == y] for y in set(self.target)}
+        self.assertEqual(len(fibers), 32)
+        self.assertEqual(sum(len(v) == 1 for v in fibers.values()), 16)
+        self.assertEqual(sum(len(v) == 2 for v in fibers.values()), 16)
+        for output, origins in fibers.items():
+            if len(origins) == 1:
+                self.assertEqual(origins[0] >> 4, 0)
+                self.assertEqual(output >> 4, 1)
+            else:
+                self.assertEqual({x >> 4 for x in origins}, {1, 2})
+                self.assertEqual(output >> 4, 2)
+                self.assertEqual(origins[1], output)
+
+    def test_collision_audit_allows_exact_goal_merges_and_rejects_wrong_ones(self) -> None:
+        self.assertTrue(research.terminal_collision_audit(self.target, self.target)["compatible_with_target"])
+        wrong = list(self.domain)
+        wrong[1] = wrong[0]  # Distinct SLOT0 data outputs are not allowed to converge.
+        self.assertFalse(research.terminal_collision_audit(tuple(wrong), self.target)["compatible_with_target"])
+        allowed = list(self.domain)
+        pair = next(v for v in self.evidence["target_collision_classes"]["merged_origin_rows"])
+        allowed[pair[1]] = allowed[pair[0]]
+        self.assertTrue(research.terminal_collision_audit(tuple(allowed), self.target)["compatible_with_target"])
+        with self.assertRaises(ValueError):
+            research.terminal_collision_audit((0,), ())
+
+    def test_partial_target_has_no_affine_extension_certificate(self) -> None:
+        certificate = research.affine_extension(self.domain, self.target, 6)
+        self.assertFalse(certificate["exists"])
+        inputs = outputs = 0
+        from typing import cast
+        for row in cast(list[int], certificate["contradiction_rows"]):
+            inputs ^= self.domain[row] | 64
+            outputs ^= self.target[row]
+        self.assertEqual(inputs, 0)
+        self.assertNotEqual(outputs, 0)
+        self.assertEqual(certificate, self.evidence["affine_extension"])
+
+    def test_primitive_family_rank_pattern_is_resampled_not_assumed(self) -> None:
+        for kind, roles, rank, affine, degree in (
+            ("toggle", (0,), 64, True, 1), ("xor", (0, 1), 64, True, 1),
+            ("memory", (0, 1), 64, True, 1), ("copy", (0, 1, 2), 32, True, 1),
+            ("evaluate", (0, 1, 2), 32, True, 1), ("plastic", (0, 1, 2), 48, False, 2)):
+            table = research.sample_program(6, ((kind, roles),))
+            self.assertEqual(len(set(table)), rank)
+            self.assertEqual(research.is_affine(table), affine)
+            self.assertEqual(research.algebraic_normal_form(table)["degree"], degree)
+            summary = self.evidence["primitive_families"][kind]
+            self.assertEqual(summary["image_sizes"], [rank])
+            self.assertEqual(summary["affine_values"], [affine])
+            self.assertEqual(summary["degrees"], [degree])
+
+    def test_complete_basis_aliases_match_cursor_runtime_evidence(self) -> None:
+        self.assertEqual(self.evidence["raw_calls"], 426)
+        self.assertEqual(self.evidence["unique_tables"], 336)
+        self.assertEqual(self.evidence["canonical_basis"], self.artifact["persistent_cursor"]["canonical_basis"])
+        self.assertEqual(self.evidence["basis_aliases"], self.artifact["persistent_cursor"]["basis_aliases"])
+
+    def test_all_one_call_geometry_and_collision_receipts_recompute(self) -> None:
+        basis = self.evidence["canonical_basis"]
+        self.assertEqual(len(self.evidence["one_call_candidates"]), 336)
+        for candidate in self.evidence["one_call_candidates"]:
+            table = tuple(basis[candidate["name"]])
+            output = tuple(table[x] for x in self.domain)
+            self.assertEqual(candidate["collision_audit"], research.terminal_collision_audit(output, self.target))
+            trace = candidate["trajectory"]
+            self.assertEqual(trace[0]["cardinality"], 48)
+            self.assertEqual(trace[1]["ordered_outputs"], list(output))
+            self.assertEqual(trace[1]["cardinality"], len(set(output)))
+            self.assertEqual(trace[1]["execution_codes_occupied"], sorted({v >> 4 for v in output}))
+            self.assertEqual(sum(trace[1]["data_distribution"]), len(set(output)))
+            self.assertTrue(trace[1]["inside_prefix_full_image"])
+
+    def test_injective48_plastic_calls_fill_their_complete_image(self) -> None:
+        checked = 0
+        for candidate in self.evidence["one_call_candidates"]:
+            if candidate["plastic"] and candidate["collision_audit"]["cardinality"] == 48:
+                self.assertTrue(candidate["fills_complete_primitive_image"])
+                table = self.evidence["canonical_basis"][candidate["name"]]
+                self.assertEqual({table[x] for x in self.domain}, set(table))
+                self.assertTrue(candidate["trajectory"][0]["plastic_48_injective_constraint_applies"])
+                checked += 1
+        self.assertGreater(checked, 0)
+
+    def test_symbolic_search_accepts_a_noninjective48_row_contract(self) -> None:
+        operation = ("copy", (0, 1, 2))
+        table = research.sample_program(6, (operation,))
+        target = tuple(table[x] for x in self.domain)
+        words, record = research.symbolic_program_search(6, self.domain, target, 1,
+            enumerate_all=False, timeout_ms=5_000, wall_seconds=6)
+        self.assertEqual(record["status"], "sat")
+        self.assertTrue(words)
+        for word in words:
+            actual = research.sample_program(6, word)
+            self.assertEqual(tuple(actual[x] for x in self.domain), target)
+        with self.assertRaises(ValueError):
+            research.symbolic_program_search(6, self.domain, self.target, 0, injective_prefixes=True)
+
+    def test_search_bounds_separate_unsat_unknown_and_demonstrated_upper(self) -> None:
+        search = self.evidence["search"]
+        lower = 0
+        for record in search["records"]:
+            self.assertEqual(record["domain_rows"], 48)
+            self.assertFalse(record["injective_prefixes"])
+            if record["length"] == lower and record["status"] == "unsat":
+                lower += 1
+            if record["status"] == "unknown":
+                self.assertTrue(record["unknown_reason"])
+        self.assertEqual(search["proven_lower_bound"], lower)
+        witnesses = self.evidence["witnesses"]
+        self.assertEqual(self.evidence["terminal_execution_established"], bool(witnesses))
+        if not witnesses:
+            self.assertIsNone(search["demonstrated_upper_bound"])
+            self.assertIsNone(search["proven_minimum"])
+
+    def test_borrowing_semantic_execution_bit_as_workspace_is_rejected(self) -> None:
+        control = self.evidence["borrow_execution_bit_as_workspace_control"]
+        word = tuple((kind, tuple(roles)) for kind, roles in control["word"])
+        table = research.sample_program(6, word)
+        output = tuple(table[x] for x in self.domain)
+        self.assertEqual(output, tuple(control["actual_outputs"]))
+        self.assertEqual(control["matching_rows"], 16)
+        self.assertFalse(research.terminal_collision_audit(output, self.target)["compatible_with_target"])
+
+    def test_constructed_witness_replays_every_required_coordinate_and_prefix(self) -> None:
+        self.assertTrue(self.evidence["witnesses"])
+        self.assertEqual(len(research.terminal_step_executor()), 121)
+        for witness in self.evidence["witnesses"]:
+            word = tuple((kind, tuple(roles)) for kind, roles in witness["word"])
+            table = research.sample_program(6, word)
+            self.assertEqual(tuple(table[x] for x in self.domain), self.target)
+            for row in witness["trajectory"]:
+                self.assertTrue(row["collision_audit"]["compatible_with_target"])
+            for row in witness["repeated_STEP"]:
+                self.assertEqual(row["steps"][-1], row["steps"][-2])
+
+    def test_support_words_have_independent_role_relative_effects_on_actual_files(self) -> None:
+        for record in self.evidence["constructive_support"]:
+            word = tuple((kind, tuple(roles)) for kind, roles in record["word"])
+            actual = research.sample_program(6, word)
+            self.assertEqual(actual, tuple(record["actual_full64_table"]))
+            self.assertEqual(tuple(actual[x] for x in self.domain), tuple(record["required"]))
+            self.assertEqual({actual[x] for x in self.domain}, set(self.domain))
+        self.assertEqual([record["length"] for record in self.evidence["constructive_support"]], [3, 6, 18, 48])
+
+    def test_branch_transports_target_each_code_and_restore_execution_state(self) -> None:
+        for code in range(3):
+            word = research.terminal_branch_toffoli(code, 2, 3, 4, 5)
+            actual = research.sample_program(6, word)
+            expected = tuple(x ^ (2 if x >> 4 == code and x & 8 and x & 4 else 0) for x in self.domain)
+            self.assertEqual(tuple(actual[x] for x in self.domain), expected)
+        with self.assertRaises(ValueError):
+            research.terminal_branch_toffoli(3, 2, 3, 4, 5)
+        with self.assertRaises(ValueError):
+            research.terminal_branch_toffoli(0, 2, 2, 4, 5)
+
+    def test_full_prefix_geometry_preserves48_until_exact_allowed_merge(self) -> None:
+        witness = self.evidence["witnesses"][0]
+        trace = witness["trajectory"]
+        self.assertEqual(len(trace), 122)
+        self.assertEqual([row["cardinality"] for row in trace[:117]], [48]*117)
+        self.assertEqual([row["cardinality"] for row in trace[117:]], [32]*5)
+        self.assertEqual(trace[116]["next_operation"], ["evaluate", [2, 3, 0]])
+        self.assertFalse(trace[116]["next_is_injective"])
+        self.assertTrue(trace[116]["next_collision_audit"]["compatible_with_target"])
+        self.assertTrue(any(row["reserved_execution_code_occupied"] for row in trace))
+        for row in trace:
+            self.assertEqual(sum(row["data_distribution"]), row["cardinality"])
+            self.assertTrue(row["collision_audit"]["compatible_with_target"])
+            if row["plastic_48_injective_constraint_applies"]:
+                self.assertTrue(row["plastic_complete_image_equality"])
+        self.assertTrue(trace[-1]["program_bits_preserved"])
+        self.assertEqual(trace[-1]["execution_codes_occupied"], [1, 2])
+
+    def test_repeated_identical_steps_reach_done_and_remain_semantically_inert(self) -> None:
+        witness = self.evidence["witnesses"][0]
+        self.assertEqual(len(witness["repeated_STEP"]), 48)
+        for row in witness["repeated_STEP"]:
+            e0, e1, p0, p1, a, b = row["input"]
+            code, data = 2*e0+e1, 2*a+b
+            for state in row["steps"]:
+                if code < 2:
+                    data = self.alphabet[(p0,p1)[code]][data]
+                code = min(code+1, 2)
+                self.assertEqual(state, [code >> 1, code & 1, p0, p1, data >> 1, data & 1])
+            self.assertFalse(row["external_E_edits"])
+            self.assertTrue(row["program_bytes_preserved"])
+
+    def test_done_preserves_all_six_physical_bytes_despite_running121_calls(self) -> None:
+        word = research.terminal_step_executor()
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory)/str(i) for i in range(6))
+            for value in range(32,48):
+                research.execute(research.states(6)[value], (), paths)
+                original = tuple(path.read_bytes() for path in paths)
+                for operation in word:
+                    research.apply_operation(operation, paths)
+                self.assertEqual(tuple(path.read_bytes() for path in paths), original)
+        self.assertEqual(self.evidence["witnesses"][0]["low_level_calls_run_at_DONE"], 121)
+        self.assertFalse(self.evidence["autonomous_cessation_established"])
+
+    def test_fresh_processes_continue_then_execute_inert_done_without_dispatch(self) -> None:
+        witness = self.evidence["witnesses"][0]
+        self.assertEqual(len(witness["process_continuation"]),16)
+        self.assertEqual(witness["fresh_process_count"],48)
+        for row in witness["process_continuation"]:
+            _, _, p0, p1, a, b = row["input"]
+            first = self.alphabet[p0][2*a+b]
+            second = self.alphabet[p1][first]
+            self.assertEqual(row["fresh_process_states"][0], [0,1,p0,p1,first >> 1,first & 1])
+            self.assertEqual(row["fresh_process_states"][1], [1,0,p0,p1,second >> 1,second & 1])
+            self.assertEqual(row["fresh_process_states"][2],row["fresh_process_states"][1])
+            self.assertIn("no execution code or slot",row["arguments"])
+            self.assertTrue(row["program_bytes_preserved"])
+        self.assertFalse(witness["harness_execution_state_dispatch"])
+
+    def test_inactive_slot_interventions_and_done_ignore_instruction_contents(self) -> None:
+        word = research.terminal_step_executor()
+        with tempfile.TemporaryDirectory() as directory:
+            paths = tuple(Path(directory)/str(i) for i in range(6))
+            for value in self.domain:
+                initial = research.states(6)[value]
+                baseline = research.execute(initial,word,paths)
+                code = value >> 4
+                changed = 3 if code == 0 else 2
+                edited = list(initial)
+                edited[changed] ^= 1
+                actual = research.execute(tuple(edited),word,paths)
+                self.assertEqual(actual[:2],baseline[:2])
+                self.assertEqual(actual[4:],baseline[4:])
+                self.assertEqual(actual[changed],edited[changed])
+
+    def test_construction_is_an_upper_bound_separate_from_global_solver(self) -> None:
+        search = self.evidence["search"]
+        self.assertEqual(search["demonstrated_upper_bound"],121)
+        self.assertEqual(search["proven_lower_bound"],6)
+        self.assertIsNone(search["proven_minimum"])
+        self.assertEqual(search["words"],[])
+        self.assertEqual(self.evidence["witnesses"][0]["source"],"derived construction")
+        self.assertFalse(self.evidence["length_combined"])
+        self.assertFalse(self.evidence["runtime_modified"])
+
+    def test_previous_fourteen_evidence_sections_are_preserved(self) -> None:
+        import hashlib
+        fingerprints = self.evidence["preserved_previous_sections_sha256"]
+        self.assertEqual(len(fingerprints), 14)
+        import json
+        for key, sha in fingerprints.items():
+            self.assertEqual(hashlib.sha256(json.dumps(self.artifact[key], sort_keys=True).encode()).hexdigest(), sha)
+
+
 if __name__ == "__main__":
     unittest.main()
